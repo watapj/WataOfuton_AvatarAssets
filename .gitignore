@@ -77,14 +77,14 @@ UserSettings*
 Packages*
 ProjectSettings*
 
+Assets/Scenes*
 Assets/Sandbox*
-Assets/Resources*
 Assets/XR*
 
 Assets/Toon*
 Assets/_PoiyomiShaders*
-Assets/csc.rsp*
 Assets/ArxCharacterShaders*
 Assets/Unlit_WF_ShaderSuite*
 Assets/Sunao Shader*
 Assets/Reflex Shader 2*
+Assets/csc.rsp*

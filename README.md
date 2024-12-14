@@ -13,7 +13,7 @@
 - Unity2022.3.22f1
 
 以下のツールを事前に Project へインポートしておいてください.
-- VRChatSDK
+- VRChat SDK - Avatars
 - [lilToon]( https://github.com/lilxyzw/lilToon "lilToon")
 - [Modular Avatar]( https://github.com/bdunderscore/modular-avatar "Modular Avatar")
 - [Avatar Optimizer]( https://github.com/anatawa12/AvatarOptimizer "AAO Avatar Optimizer")
@@ -22,4 +22,4 @@
 
 ## ツール一覧
 
-- ここに一覧を書く
+- TODO：ここに一覧を書く
