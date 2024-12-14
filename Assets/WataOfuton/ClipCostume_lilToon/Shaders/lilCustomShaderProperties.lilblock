@@ -1,0 +1,8 @@
+
+        //----------------------------------------------------------------------------------------------------------------------
+        // Custom Properties
+        //_CustomVariable ("Custom Variable", Float) = 0
+        
+        _ClipMask ("Clip Mask", 2D) = "white" {}
+        [lilToggle]_ClipOn("Clip On", Float) = 0.0
+        _EyeDist("Eye Clip Distance", Range(0.0, 1.0)) = 0.1

@@ -1,0 +1,1 @@
+clipOn.anim 及び clipOff.anim の編集を忘れずに！

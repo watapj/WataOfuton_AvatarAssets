@@ -1,0 +1,188 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &6954905022540520563
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4279498527415771427, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5026074925578282318, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: m_Name
+      value: _ClothTransformApplier Variant
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: isRenameBreast
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.size
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].Name
+      value: Shinano->Masscat2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].Name
+      value: Kikyo->Masscat2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].Name
+      value: Kikyo->Shinano
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].presetPrefab
+      value: 
+      objectReference: {fileID: 8241117308922861233, guid: 676392c6c53e925449c40b317625640e,
+        type: 3}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].presetPrefab
+      value: 
+      objectReference: {fileID: 6003753025829581286, guid: 3a842cc5bbf9b004ca2b7e4e426f5f84,
+        type: 3}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].presetPrefab
+      value: 
+      objectReference: {fileID: 2165015860030984887, guid: bea9832e4632cdb469e8137e3154cfa6,
+        type: 3}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].isFoldoutOpen
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].isFoldoutOpen
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].isFoldoutOpen
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].blendShapeSet.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].blendShapeSet.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].blendShapeSet.Array.size
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].blendShapeSet.Array.data[0].name
+      value: Breasts_big
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].blendShapeSet.Array.data[1].name
+      value: Breasts_flat
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].blendShapeSet.Array.data[0].name
+      value: Breasts_big
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].blendShapeSet.Array.data[1].name
+      value: Breasts_small
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].blendShapeSet.Array.data[0].name
+      value: Breasts_big
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].blendShapeSet.Array.data[1].name
+      value: Breasts_small
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[0].blendShapeSet.Array.data[1].value
+      value: 70
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[1].blendShapeSet.Array.data[1].value
+      value: 50
+      objectReference: {fileID: 0}
+    - target: {fileID: 7155372503751412051, guid: abda4f15b7c0e3f44bbdf3ba35e2b383,
+        type: 3}
+      propertyPath: transformGroups.Array.data[2].blendShapeSet.Array.data[1].value
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: abda4f15b7c0e3f44bbdf3ba35e2b383, type: 3}
