@@ -1,0 +1,1 @@
+# WataOfuton_AvatarAssets
