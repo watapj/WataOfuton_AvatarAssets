@@ -1,0 +1,22 @@
+{
+    "name": "ClipCostumeSetting.Editor",
+    "rootNamespace": "",
+    "references": [
+        "nadena.dev.ndmf",
+        "nadena.dev.ndmf.runtime",
+        "nadena.dev.modular-avatar.core",
+        "lilToon.Editor",
+        "ClipCostumeSetting"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
