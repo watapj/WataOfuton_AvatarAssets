@@ -4,7 +4,7 @@
 
 配布場所 Booth ( https://wata-ofuton.booth.pm/ )
 
-何かありましたら Twitter ( https://twitter.com/wata_pjv ) へ.
+何かありましたら Booth のメッセージ機能にてご連絡ください.
 
 ---
 
