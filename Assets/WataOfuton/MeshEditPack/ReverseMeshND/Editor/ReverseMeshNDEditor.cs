@@ -5,6 +5,7 @@ using Anatawa12.AvatarOptimizer.API;
 namespace WataOfuton.Tools.ReverseMeshND.Editor
 {
     [CustomEditor(typeof(ReverseMeshND))]
+    [CanEditMultipleObjects]
     public class ReverseMeshNDEditor : UnityEditor.Editor
     {
         ReverseMeshND comp;
@@ -18,9 +19,9 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
 
         public override void OnInspectorGUI()
         {
-            EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.ObjectField("Script", MonoScript.FromMonoBehaviour((MonoBehaviour)target), typeof(MonoScript), false);
-            EditorGUI.EndDisabledGroup();
+            // EditorGUI.BeginDisabledGroup(true);
+            // EditorGUILayout.ObjectField("Script", MonoScript.FromMonoBehaviour((MonoBehaviour)target), typeof(MonoScript), false);
+            // EditorGUI.EndDisabledGroup();
 
             serializedObject.Update();
 
@@ -33,7 +34,7 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
                 comp.TryReverseMeshND();
             }
 
-            var text = "プレビュー後は 'Ctrl + Z' で元に戻してください！ \n"
+            var text = "プレビュー後は 'Ctrl + Z '(Undo) で元に戻せます. \n"
                      + "NDMF を使って Build 時に動作します.";
             EditorGUILayout.HelpBox(text, MessageType.Info);
             EditorGUILayout.Space();

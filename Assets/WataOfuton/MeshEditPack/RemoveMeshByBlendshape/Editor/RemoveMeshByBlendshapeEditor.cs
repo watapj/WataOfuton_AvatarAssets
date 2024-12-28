@@ -26,9 +26,9 @@ namespace WataOfuton.Tools.RemoveMeshByBlendshape.Editor
 
         public override void OnInspectorGUI()
         {
-            EditorGUI.BeginDisabledGroup(true);
-            EditorGUILayout.ObjectField("Script", MonoScript.FromMonoBehaviour((MonoBehaviour)target), typeof(MonoScript), false);
-            EditorGUI.EndDisabledGroup();
+            // EditorGUI.BeginDisabledGroup(true);
+            // EditorGUILayout.ObjectField("Script", MonoScript.FromMonoBehaviour((MonoBehaviour)target), typeof(MonoScript), false);
+            // EditorGUI.EndDisabledGroup();
 
             serializedObject.Update();
 

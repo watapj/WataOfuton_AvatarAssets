@@ -14,8 +14,7 @@ namespace WataOfuton.Tools.ReverseMeshND
 
         public void TryReverseMeshND()
         {
-
-            Undo.RegisterCompleteObjectUndo(this.transform, "Remove Mesh");
+            Undo.RegisterCompleteObjectUndo(this, "Remove Mesh");
             var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
             foreach (var smr in smrs)
                 Undo.RegisterCompleteObjectUndo(smr, "Remove Mesh");
