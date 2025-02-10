@@ -1,6 +1,8 @@
 ﻿using UnityEditor;
 using UnityEngine;
+#if AVATAR_OPTIMIZER
 using Anatawa12.AvatarOptimizer.API;
+#endif
 
 namespace WataOfuton.Tools.RemoveMeshByBlendshape.Editor
 {
