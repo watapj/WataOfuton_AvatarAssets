@@ -2,6 +2,9 @@
 using UnityEngine;
 using System.Collections.Generic;
 using VRC.SDK3.Avatars.Components;
+#if AVATAR_OPTIMIZER
+using Anatawa12.AvatarOptimizer.API;
+#endif
 
 namespace WataOfuton.Tools.MMDSetup.Editor
 {
@@ -11,7 +14,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         MMDSetup MMDSetup;
         SerializedProperty faceMesh;
         SerializedProperty bodyMeshes;
-#if UNITY_2022_3_OR_NEWER
         SerializedProperty enableGenerateBS;
         SerializedProperty blendShapeIndices1;
         SerializedProperty blendShapePowers1;
@@ -19,14 +21,14 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         SerializedProperty blendShapeIndices2;
         SerializedProperty blendShapePowers2;
         SerializedProperty enableOverrideBS;
-#endif
+        private static bool isShowUpdateMessage;
+        private static CheckForUpdate.VersionInfo versionInfo;
 
         void OnEnable()
         {
             MMDSetup = target as MMDSetup;
             faceMesh = serializedObject.FindProperty(nameof(MMDSetup.faceMesh));
             bodyMeshes = serializedObject.FindProperty(nameof(MMDSetup.bodyMeshes));
-#if UNITY_2022_3_OR_NEWER
             enableGenerateBS = serializedObject.FindProperty(nameof(MMDSetup.enableGenerateBS));
             blendShapeIndices1 = serializedObject.FindProperty(nameof(MMDSetup.blendShapeIndices1));
             blendShapePowers1 = serializedObject.FindProperty(nameof(MMDSetup.blendShapePowers1));
@@ -34,12 +36,25 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             blendShapeIndices2 = serializedObject.FindProperty(nameof(MMDSetup.blendShapeIndices2));
             blendShapePowers2 = serializedObject.FindProperty(nameof(MMDSetup.blendShapePowers2));
             enableOverrideBS = serializedObject.FindProperty(nameof(MMDSetup.enableOverrideBS));
-#endif
         }
 
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
+
+            if (isShowUpdateMessage)
+            {
+                using (new EditorGUILayout.VerticalScope("HelpBox", GUILayout.ExpandWidth(true)))
+                {
+                    EditorGUILayout.HelpBox($"新しいバージョン {versionInfo.version} が利用可能です！ 詳細は Booth をご確認ください.", MessageType.Info);
+
+                    if (GUILayout.Button("Open Booth"))
+                    {
+                        Application.OpenURL(versionInfo.releaseURL);
+                    }
+                }
+                EditorGUILayout.Space();
+            }
 
             if (GUILayout.Button("Re Setting."))
             {
@@ -63,7 +78,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 if (bodies.Count > 0)
                 {
                     bool isGetFace = false;
-                    var faceBSCheckList = MMDSetupPlugin.blendShapeMappingsFace;
+                    var faceBSCheckList = blendShapeMappingsFace;
                     for (int i = 0; i < bodies.Count; i++)
                     {
                         SerializedProperty bodyProperty = bodyMeshes.GetArrayElementAtIndex(i);
@@ -76,7 +91,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                             for (int j = 0; j < faceBSCheckList.Length; j++)
                             {
                                 if (string.Equals(bodies[i].name, "Face", System.StringComparison.OrdinalIgnoreCase)
-                                    || MMDSetupPlugin.BlendShapeExists(mesh, faceBSCheckList[j], false))
+                                    || BlendShapeExists(mesh, faceBSCheckList[j], false))
                                 {
                                     // 頭メッシュと判断
                                     faceMesh.objectReferenceValue = bodies[i];
@@ -101,22 +116,15 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 }
             }
 
-#if UNITY_2022_3_OR_NEWER
-
             var faceT = (Transform)faceMesh.objectReferenceValue;
             if (faceT != null)
             {
                 var faceSMR = faceT.GetComponent<SkinnedMeshRenderer>();
                 if (faceSMR != null)
                 {
-                    BlendShapeMappings(faceSMR);
+                    BlendShapeMapping(faceSMR);
                 }
             }
-#else
-            var text2 = "MMD用BlendShape生成機能は、Unity2022でのみ動作します.";
-            EditorGUILayout.HelpBox(text2, MessageType.Info);
-#endif
-
             serializedObject.ApplyModifiedProperties();
         }
 
@@ -154,36 +162,59 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             return null;
         }
 
-#if UNITY_2022_3_OR_NEWER
-        private void BlendShapeMappings(SkinnedMeshRenderer face)
+        private static bool BlendShapeExists(Mesh mesh, string name, bool isCheckOrdinal)
         {
-            SerializedProperty boolProperty = enableGenerateBS;
-            string[] mappinglist = MMDSetupPlugin.blendShapeMappings4MMD;
+            for (int i = 0; i < mesh.blendShapeCount; i++)
+            {
+                if (isCheckOrdinal)
+                {
+                    if (mesh.GetBlendShapeName(i) == name)
+                        return true;
+                }
+                else
+                {
+                    if (string.Equals(mesh.GetBlendShapeName(i), name, System.StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        private static string[] blendShapeMappingsFace = new string[]
+        {
+            "vrc.v_aa",
+            "vrc_v_aa",
+            "vrc_v.aa",
+            "lip_aa",
+            "lip.aa",
+            "mouse_a",
+            "mouse.a",
+            "あ",
+        };
+
+        private void BlendShapeMapping(SkinnedMeshRenderer face)
+        {
+            string[] mappinglist = BlendShapeMappings.blendShapeMappings4MMD;
 
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.Space(5);
             EditorGUILayout.BeginHorizontal();
             EditorGUIUtility.labelWidth = 20;
-            boolProperty.boolValue = EditorGUILayout.Toggle("", boolProperty.boolValue, GUILayout.Width(20));
+            enableGenerateBS.boolValue = EditorGUILayout.Toggle("", enableGenerateBS.boolValue, GUILayout.Width(20));
             EditorGUIUtility.labelWidth = 200;
             EditorGUILayout.LabelField("Generate BlendShape for MMD from Original BlendShape");
             EditorGUIUtility.labelWidth = 0;
             EditorGUILayout.EndHorizontal();
-            if (EditorGUI.EndChangeCheck())
+            if (EditorGUI.EndChangeCheck() || (blendShapeIndices1.arraySize != mappinglist.Length))
             {
-                if (boolProperty.boolValue)
+                if (enableGenerateBS.boolValue)
                 {
-                    blendShapeIndices1.arraySize = mappinglist.Length;
-                    blendShapePowers1.arraySize = mappinglist.Length;
-                    blendShapeIndices2.arraySize = mappinglist.Length;
-                    blendShapePowers2.arraySize = mappinglist.Length;
-                    enableBlendBS.arraySize = mappinglist.Length;
-                    enableOverrideBS.arraySize = mappinglist.Length;
+                    SetArrays(mappinglist.Length);
                 }
             }
 
             EditorGUILayout.Space(5);
-            if (boolProperty.boolValue)
+            if (enableGenerateBS.boolValue)
             {
                 Mesh mesh = face.sharedMesh;
                 if (mesh == null) return;
@@ -197,6 +228,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                     return;
                 }
 
+                // 先頭に「----」を入れる
                 string[] blendShapeList = new string[blendShapeCount + 1];
                 blendShapeList[0] = "----";
                 for (int i = 0; i < blendShapeCount; i++)
@@ -207,16 +239,17 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 for (int i = 0; i < mappinglist.Length; i++)
                 {
                     SerializedProperty isoverrideArrayProperty = enableOverrideBS.GetArrayElementAtIndex(i);
-                    if (MMDSetupPlugin.BlendShapeExists(mesh, mappinglist[i], true) && !isoverrideArrayProperty.boolValue)
+
+                    // 既に同名シェイプキーがある場合
+                    if (BlendShapeExists(mesh, mappinglist[i], true) && !isoverrideArrayProperty.boolValue)
                     {
                         EditorGUILayout.BeginHorizontal();
                         EditorGUILayout.LabelField(mappinglist[i], GUILayout.Width(100));
                         EditorGUILayout.LabelField("This BlendShape already exists.   Override ? ->", GUILayout.Width(270));
-                        SerializedProperty indexProperty = blendShapeIndices1.GetArrayElementAtIndex(i);
-                        indexProperty.intValue = -1;
+                        // 生成用の index は 0 にしてスキップ扱い（ユーザーがoverrideしない限り）
+                        blendShapeIndices1.GetArrayElementAtIndex(i).intValue = 0;
                         GUILayout.FlexibleSpace();
-                        SerializedProperty boolArrayProperty = enableOverrideBS.GetArrayElementAtIndex(i);
-                        boolArrayProperty.boolValue = EditorGUILayout.Toggle(boolArrayProperty.boolValue, GUILayout.Width(20));
+                        isoverrideArrayProperty.boolValue = EditorGUILayout.Toggle(isoverrideArrayProperty.boolValue, GUILayout.Width(20));
                         EditorGUILayout.EndHorizontal();
                     }
                     else
@@ -229,9 +262,12 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                             indexProperty.intValue = 0;
                         }
                         indexProperty.intValue = EditorGUILayout.Popup(mappinglist[i], indexProperty.intValue, blendShapeList, GUILayout.Width(200));
+
                         SerializedProperty powerProperty = blendShapePowers1.GetArrayElementAtIndex(i);
                         powerProperty.floatValue = EditorGUILayout.Slider(powerProperty.floatValue, -100, 100);
                         EditorGUIUtility.labelWidth = 0;
+
+                        // override フラグ表示
                         if (isoverrideArrayProperty.boolValue)
                         {
                             isoverrideArrayProperty.boolValue = EditorGUILayout.Toggle(isoverrideArrayProperty.boolValue, GUILayout.Width(20));
@@ -242,6 +278,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                         }
                         EditorGUILayout.EndHorizontal();
 
+                        // Blend のオンオフ
                         EditorGUILayout.BeginHorizontal();
                         EditorGUILayout.LabelField(" ", GUILayout.Width(10));
                         SerializedProperty boolArrayProperty = enableBlendBS.GetArrayElementAtIndex(i);
@@ -270,6 +307,40 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 }
             }
         }
-#endif
+
+        private void SetArrays(int length)
+        {
+            blendShapeIndices1.arraySize = length;
+            blendShapePowers1.arraySize = length;
+            blendShapeIndices2.arraySize = length;
+            blendShapePowers2.arraySize = length;
+            enableBlendBS.arraySize = length;
+            enableOverrideBS.arraySize = length;
+        }
+
+        public static void CheckForUpdate(CheckForUpdate.VersionInfo info, bool isShow)
+        {
+            isShowUpdateMessage = isShow;
+            versionInfo = info;
+        }
     }
+
+    // AAO に登録だけして特に何もしない.
+    // https://vpm.anatawa12.com/avatar-optimizer/ja/docs/developers/make-your-components-compatible-with-aao/
+#if AVATAR_OPTIMIZER && UNITY_EDITOR
+
+    [ComponentInformation(typeof(MMDSetup))]
+    internal class MMDSetupInformation : ComponentInformation<MMDSetup>
+    {
+        protected override void CollectMutations(MMDSetup component, ComponentMutationsCollector collector)
+        {
+            // call methods on the collector to tell about the component
+        }
+
+        protected override void CollectDependency(MMDSetup component, ComponentDependencyCollector collector)
+        {
+            // call methods on the collector to tell about the component
+        }
+    }
+#endif
 }

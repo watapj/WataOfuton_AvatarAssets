@@ -6,7 +6,8 @@
         "MMDSetup",
         "nadena.dev.ndmf.runtime",
         "VRC.SDKBase",
-        "VRC.SDKBase.Editor"
+        "VRC.SDKBase.Editor",
+        "com.anatawa12.avatar-optimizer.api.editor"
     ],
     "includePlatforms": [
         "Editor"
@@ -17,6 +18,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.anatawa12.avatar-optimizer",
+            "expression": "[1.7,2.0)",
+            "define": "AVATAR_OPTIMIZER"
+        }
+    ],
     "noEngineReferences": false
 }

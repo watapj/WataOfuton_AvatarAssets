@@ -4,7 +4,6 @@ using UnityEditor;
 using UnityEditor.Animations;
 using VRC.SDK3.Avatars.Components;
 using System.Collections.Generic;
-using UnityEngine.TextCore;
 using System.Linq;
 
 [assembly: ExportsPlugin(typeof(WataOfuton.Tools.MMDSetup.Editor.MMDSetupPlugin))]
@@ -18,6 +17,8 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         private static string replacePath;
         private static string origFaceName;
         private static string[] origBodiesName;
+        private static Vector3[] reuseVerticesA, reuseNormalsA, reuseTangentsA;
+        private static Vector3[] reuseVerticesB, reuseNormalsB, reuseTangentsB;
 
         protected override void Configure()
         {
@@ -52,7 +53,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 {
                     if (bodies[i] == null)
                     {
-                        // Debug.LogWarning("[MMDSetup] Body Meshes Missing.");
+                        Debug.LogWarning("[MMDSetup] Body Meshes Missing.");
                         continue;
                     }
                     if (bodies[i].GetInstanceID() == face.GetInstanceID())
@@ -118,7 +119,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                     }
                 }
 
-#if UNITY_2022_3_OR_NEWER
                 if (MMDSetup.enableGenerateBS)
                 {
                     var smr = face.GetComponent<SkinnedMeshRenderer>();
@@ -132,20 +132,22 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                         var enableBlendBS = MMDSetup.enableBlendBS;
                         var enableOverrideBS = MMDSetup.enableOverrideBS;
 
+                        string[] mappinglist = BlendShapeMappings.blendShapeMappings4MMD;
+
                         if (enableOverrideBS.Contains(true))
                         {
                             // BlendShapeを全削除
                             mesh.ClearBlendShapes();
                             // BlendShapeの数を取得
-                            int blendShapeCount = smr.sharedMesh.blendShapeCount;
+                            int originalCount = smr.sharedMesh.blendShapeCount;
 
                             // MMD関係以外のBlendShapeを復元する
-                            for (int i = 0; i < blendShapeCount; i++)
+                            for (int i = 0; i < originalCount; i++)
                             {
-                                string blendShapeName = smr.sharedMesh.GetBlendShapeName(i);
-                                bool isContain; int n;
-                                (isContain, n) = ContainsString(blendShapeMappings4MMD, blendShapeName);
-                                if (isContain && enableOverrideBS[n]) continue;
+                                string shapeName = smr.sharedMesh.GetBlendShapeName(i);
+                                bool isInMMDList; int idxInMMDList;
+                                (isInMMDList, idxInMMDList) = ContainsString(mappinglist, shapeName);
+                                if (isInMMDList && enableOverrideBS[idxInMMDList]) continue;
 
                                 int vertexCount = smr.sharedMesh.vertexCount;
                                 Vector3[] vertices = new Vector3[vertexCount];
@@ -153,50 +155,56 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                                 Vector3[] tangents = new Vector3[vertexCount];
                                 smr.sharedMesh.GetBlendShapeFrameVertices(i, 0, vertices, normals, tangents);
 
-                                mesh.AddBlendShapeFrame(blendShapeName, 100f, vertices, normals, tangents);
+                                mesh.AddBlendShapeFrame(shapeName, 100f, vertices, normals, tangents);
                             }
                         }
 
-                        for (int i = 0; i < blendShapeMappings4MMD.Length; i++)
+                        for (int i = 0; i < mappinglist.Length; i++)
                         {
-                            blendShapeIndices1[i] += -1; // 0 番目には"----"が入っているので1つずらす
-                            if (blendShapeIndices1[i] == -1)
+                            string targetBSName = mappinglist[i];
+
+                            int popupValue1 = blendShapeIndices1[i];
+                            // popupValue1 == 0 -> “----” を選択中 -> スキップ
+                            if (popupValue1 == 0)
                             {
-                                // Debug.Log($"[MMDSetup] Skip Create BlendShape '{blendShapeMappings4MMD[i]}'.");
-                                continue;
-                            }
-                            if (blendShapeIndices1[i] == -2)
-                            {
-                                // Debug.Log($"[MMDSetup] BlendShape '{blendShapeMappings4MMD[i]}' already exists.");
-                                continue;
-                            }
-                            if (blendShapeIndices1[i] <= -3)
-                            {
-                                Debug.Log($"[MMDSetup] Something wrong '{blendShapeMappings4MMD[i]}'.");
-                                continue;
-                            }
-                            if (blendShapePowers1[i] == 0f)
-                            {
-                                Debug.Log($"[MMDSetup] Skip Create BlendShape '{blendShapeMappings4MMD[i]}'(Zero Wight).");
+                                // Debug.Log($"[MMDSetup] Skip {targetBSName}");
                                 continue;
                             }
 
+                            // 1->メッシュ上のインデックス0, 2->1, 3->2...
+                            int realIndex1 = popupValue1 - 1;
+                            if (realIndex1 < 0 || realIndex1 >= smr.sharedMesh.blendShapeCount)
+                            {
+                                // 範囲外 -> スキップ
+                                continue;
+                            }
+
+                            // BlendモードがONなら blendShapeIndices2 も見る
                             if (enableBlendBS[i])
                             {
-                                blendShapeIndices2[i] -= 1;
-                                BlendingBlendShape4MMD(mesh, blendShapeMappings4MMD[i], blendShapeIndices1[i], blendShapePowers1[i] * 0.01f, blendShapeIndices2[i], blendShapePowers2[i] * 0.01f);
-                                Debug.Log($"[MMDSetup] Blend BlendShape '{blendShapeMappings4MMD[i]}'.");
+                                int popupValue2 = blendShapeIndices2[i];
+                                int realIndex2 = popupValue2 - 1;
+
+                                if (realIndex2 < 0 || realIndex2 >= smr.sharedMesh.blendShapeCount)
+                                {
+                                    // 2番目シェイプがスキップ扱い -> 単独生成
+                                    AddBlendShape4MMD(mesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f);
+                                }
+                                else
+                                {
+                                    // 2つのBlendShapeを合成
+                                    BlendingBlendShape4MMD(mesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f, realIndex2, blendShapePowers2[i] * 0.01f);
+                                }
                             }
                             else
                             {
-                                AddBlendShape4MMD(mesh, blendShapeMappings4MMD[i], blendShapeIndices1[i], blendShapePowers1[i] * 0.01f);
-                                Debug.Log($"[MMDSetup] Generate BlendShape '{blendShapeMappings4MMD[i]}'.");
+                                // Blendしない -> 単独生成
+                                AddBlendShape4MMD(mesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f);
                             }
                         }
                     }
                     smr.sharedMesh = mesh;
                 }
-#endif
 
                 Object.DestroyImmediate(MMDSetup);
             });
@@ -261,36 +269,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             return path;
         }
 
-        public static bool BlendShapeExists(Mesh mesh, string name, bool isCheckOrdinal)
-        {
-            for (int i = 0; i < mesh.blendShapeCount; i++)
-            {
-                if (isCheckOrdinal)
-                {
-                    if (mesh.GetBlendShapeName(i) == name)
-                        return true;
-                }
-                else
-                {
-                    if (string.Equals(mesh.GetBlendShapeName(i), name, System.StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            return false;
-        }
-        public static string[] blendShapeMappingsFace = new string[]
-        {
-            "vrc.v_aa",
-            "vrc_v_aa",
-            "vrc_v.aa",
-            "lip_aa",
-            "lip.aa",
-            "mouse_a",
-            "mouse.a",
-        };
-
-
-#if UNITY_2022_3_OR_NEWER
         private static (bool, int) ContainsString(string[] array, string target)
         {
             for (int i = 0; i < array.Length; i++)
@@ -303,99 +281,71 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             return (false, -1);
         }
 
-        private static void AddBlendShape4MMD(Mesh mesh, string newBlendShapeName, int OrigBlendShapeIndex, float power)
+        private static void PrepareReuseArrays(int vertexCount)
         {
-            Vector3[] deltaVertices = new Vector3[mesh.vertexCount];
-            Vector3[] deltaNormals = new Vector3[mesh.vertexCount];
-            Vector3[] deltaTangents = new Vector3[mesh.vertexCount];
-            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex, 0, deltaVertices, deltaNormals, deltaTangents);
-
-            for (int i = 0; i < deltaVertices.Length; i++)
+            // 初回または、vertexCount が変わった場合のみ再確保
+            if (reuseVerticesA == null || reuseVerticesA.Length != vertexCount)
             {
-                deltaVertices[i] *= power; // power%のウェイトを適用
-                deltaNormals[i] *= power;
-                deltaTangents[i] *= power;
+                reuseVerticesA = new Vector3[vertexCount];
+                reuseNormalsA = new Vector3[vertexCount];
+                reuseTangentsA = new Vector3[vertexCount];
+                reuseVerticesB = new Vector3[vertexCount];
+                reuseNormalsB = new Vector3[vertexCount];
+                reuseTangentsB = new Vector3[vertexCount];
             }
-            mesh.AddBlendShapeFrame(newBlendShapeName, 100, deltaVertices, deltaNormals, deltaTangents);
         }
 
+        private static void AddBlendShape4MMD(Mesh mesh, string newBlendShapeName, int OrigBlendShapeIndex, float power)
+        {
+            if (power == 0f)
+            {
+                Debug.Log($"[MMDSetup] Skip Create BlendShape '{newBlendShapeName}'(Zero Wight).");
+                return;
+            }
+
+            int vertexCount = mesh.vertexCount;
+            PrepareReuseArrays(vertexCount);
+            // reuseVerticesA / reuseNormalsA / reuseTangentsA にフレームを取得
+            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex, 0, reuseVerticesA, reuseNormalsA, reuseTangentsA);
+
+            for (int i = 0; i < vertexCount; i++)
+            {
+                reuseVerticesA[i] = reuseVerticesA[i] * power; // power%のウェイトを適用
+                reuseNormalsA[i] = reuseNormalsA[i] * power;
+                reuseTangentsA[i] = reuseTangentsA[i] * power;
+            }
+            mesh.AddBlendShapeFrame(newBlendShapeName, 100f, reuseVerticesA, reuseNormalsA, reuseTangentsA);
+        }
 
         private static void BlendingBlendShape4MMD(Mesh mesh, string newBlendShapeName, int OrigBlendShapeIndex1, float power1, int OrigBlendShapeIndex2, float power2)
         {
-            Vector3[] deltaVerticesA = new Vector3[mesh.vertexCount];
-            Vector3[] deltaNormalsA = new Vector3[mesh.vertexCount];
-            Vector3[] deltaTangentsA = new Vector3[mesh.vertexCount];
-            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex1, 0, deltaVerticesA, deltaNormalsA, deltaTangentsA);
-            Vector3[] deltaVerticesB = new Vector3[mesh.vertexCount];
-            Vector3[] deltaNormalsB = new Vector3[mesh.vertexCount];
-            Vector3[] deltaTangentsB = new Vector3[mesh.vertexCount];
-            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex2, 0, deltaVerticesB, deltaNormalsB, deltaTangentsB);
-
-            for (int i = 0; i < deltaVerticesA.Length; i++)
+            if (power1 == 0f && power2 == 0f)
             {
-                deltaVerticesA[i] = deltaVerticesA[i] * power1 + deltaVerticesB[i] * power2;
-                deltaNormalsA[i] = deltaNormalsA[i] * power1 + deltaNormalsB[i] * power2;
-                deltaTangentsA[i] = deltaTangentsA[i] * power1 + deltaTangentsB[i] * power2;
+                Debug.Log($"[MMDSetup] Skip Create BlendShape '{newBlendShapeName}'(Both BlendShapes have Zero Weight).");
+                return;
             }
-            mesh.AddBlendShapeFrame(newBlendShapeName, 100f, deltaVerticesA, deltaNormalsA, deltaTangentsA);
+            if (power1 == 0f)
+            {
+                Debug.Log($"[MMDSetup] BlendShape1 has Zero Weight for '{newBlendShapeName}'. Using BlendShape2 only.");
+            }
+            if (power2 == 0f)
+            {
+                Debug.Log($"[MMDSetup] BlendShape2 has Zero Weight for '{newBlendShapeName}'. Using BlendShape1 only.");
+            }
+
+            int vertexCount = mesh.vertexCount;
+            PrepareReuseArrays(vertexCount);
+            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex1, 0, reuseVerticesA, reuseNormalsA, reuseTangentsA);
+            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex2, 0, reuseVerticesB, reuseNormalsB, reuseTangentsB);
+
+            // 加算合成
+            for (int i = 0; i < vertexCount; i++)
+            {
+                reuseVerticesA[i] = reuseVerticesA[i] * power1 + reuseVerticesB[i] * power2;
+                reuseNormalsA[i] = reuseNormalsA[i] * power1 + reuseNormalsB[i] * power2;
+                reuseTangentsA[i] = reuseTangentsA[i] * power1 + reuseTangentsB[i] * power2;
+            }
+            mesh.AddBlendShapeFrame(newBlendShapeName, 100f, reuseVerticesA, reuseNormalsA, reuseTangentsA);
         }
-
-
-        public static string[] blendShapeMappings4MMD = new string[]
-        {
-            // https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/0b7b5e4b-c62e-41f7-8ced-1f3e58c4f5bf/d5nbmvp-5779f5ac-d476-426c-8ee6-2111eff8e76c.png
-            "まばたき",
-            "笑い",
-            "ウィンク",
-            "ウィンク右",
-            "ウィンク２",
-            // "ウィンク２右",
-            "ｳｨﾝｸ２右",
-            "なごみ",
-            "はぅ",
-            "びっくり",
-            "じと目",
-            "ｷﾘｯ",
-            "なぬ！",
-            "白目", // "はちゅ目",
-            "星目",
-            "はぁと",
-            "瞳大",
-            "瞳小",
-            "恐ろしい子！",
-            "ハイライト消し",
-
-            "あ",
-            "い",
-            "う",
-            "え",
-            "お",
-            // "あ２",
-            "ん",
-            "▲",
-            "∧",
-            "ワ",
-            "□",
-            "ω",
-            "ω□",
-            "えー",
-            "はんっ！",
-            "にやり",
-            "にやり２",
-            "にっこり",
-            "ぺろっ",
-            "てへぺろ",
-            "てへぺろ２",
-
-            "真面目",
-            "困る",
-            "にこり",
-            "怒り",
-            "上",
-            "下",
-            "照れ",
-            "涙",
-        };
-#endif
     }
 }
