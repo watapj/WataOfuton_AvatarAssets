@@ -41,7 +41,7 @@ namespace WataOfuton.Tools.MCP_MergeNeck
                 {
                     currentVersion = remoteVersion.version;
                     ApplyTriangleDiffDataAllWindow.CheckForUpdate(remoteVersion, true);
-                    Debug.Log($"[MCP_MergeNeck] アップデートがあります！エディタウィンドウを開いてください.");
+                    Debug.Log($"[MCP_MergeNeck] アップデートがあります！エディタウィンドウを開いて確認してください.");
                 }
                 else
                 {
