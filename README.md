@@ -49,6 +49,11 @@
   - 説明書は[こちら]( https://docs.google.com/document/d/1k-FENC0ggCp_mU0YXnYmKYxPT59GcC3Y7EACWipeir0/edit?usp=sharing "説明書")
   - Released under the MIT license.
 
+- [ますきゃの首の繋ぎ目を整えるツール]( https://wata-ofuton.booth.pm/items/6696521 "MCP_MergeNeck")
+  - オリジナル3Dモデル『量産型のらきゃっと　ぷらす』（ますきゃっと ぷらす）（ https://noracat.booth.pm/items/4360118 ）の首周りのメッシュを編集し法線を整えたデータを出力する. 
+  - 説明書は[こちら]( https://docs.google.com/document/d/1sE8KZtqwY5ECTBbkkscDGosbT3OlXO8faAX3JE2GOr0/edit?usp=sharing "説明書")
+  - Released under the MIT license.
+
 ## NDMF系ツール
 
 - [MeshEditPack]( https://wata-ofuton.booth.pm/items/6431920 "MeshEditPack")
