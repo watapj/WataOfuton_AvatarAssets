@@ -15,7 +15,7 @@ namespace WataOfuton.Tools.MCP_MergeNeck
         }
 
         private const string VersionJsonUrl = "https://raw.githubusercontent.com/watapj/WataOfuton_AvatarAssets/main/Assets/WataOfuton/MCP_MergeNeck/version.json"; // GitHubのversion.jsonのURL
-        private static string currentVersion = "2025.03.16"; // 現在のローカルバージョン
+        private static string currentVersion = "2025.04.19"; // 現在のローカルバージョン
 
 
         [InitializeOnLoadMethod]
