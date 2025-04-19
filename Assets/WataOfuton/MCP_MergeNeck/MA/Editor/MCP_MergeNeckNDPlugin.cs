@@ -13,10 +13,11 @@ namespace WataOfuton.Tools.MCP_MergeNeck.Editor
         {
             InPhase(BuildPhase.Transforming).BeforePlugin("com.anatawa12.avatar-optimizer").Run(nameof(MCP_MergeNeckND), ctx =>
             {
-                var comp = ctx.AvatarRootObject.GetComponentsInChildren<MCP_MergeNeckND>();
+                var root = ctx.AvatarRootObject;
+                var comp = root.GetComponentsInChildren<MCP_MergeNeckND>();
                 foreach (var c in comp)
                 {
-                    c.TryApplyDiffDataNDMF();
+                    c.TryApplyDiffDataNDMF(root.transform.localScale);
                     Object.DestroyImmediate(c);
                 }
             });

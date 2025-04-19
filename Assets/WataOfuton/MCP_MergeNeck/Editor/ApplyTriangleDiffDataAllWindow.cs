@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEditor;
+using System;
 using System.IO;
 
 namespace WataOfuton.Tools.MCP_MergeNeck
@@ -11,6 +12,7 @@ namespace WataOfuton.Tools.MCP_MergeNeck
     /// </summary>
     public class ApplyTriangleDiffDataAllWindow : EditorWindow
     {
+        public Transform avatarRoot; // 適用するアバター本体
         public SkinnedMeshRenderer targetFaceRenderer; // 差分を適用する顔メッシュ
         public SkinnedMeshRenderer targetBodyRenderer; // 差分を適用する体メッシュ
         public TriangleDiffDataAll triangleDiffDataAll; // 差分データ(ScriptableObject)
@@ -52,6 +54,21 @@ namespace WataOfuton.Tools.MCP_MergeNeck
                 ,
                 MessageType.Info);
 
+            EditorGUI.BeginChangeCheck();
+            avatarRoot = (Transform)EditorGUILayout.ObjectField("Target Face Renderer", avatarRoot, typeof(Transform), true);
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (avatarRoot != null)
+                {
+                    targetFaceRenderer = FindRendererRecursive(avatarRoot, "Face");
+                    targetBodyRenderer = FindRendererRecursive(avatarRoot, "Body");
+                }
+                else
+                {
+                    targetFaceRenderer = null;
+                    targetBodyRenderer = null;
+                }
+            }
             targetFaceRenderer = (SkinnedMeshRenderer)EditorGUILayout.ObjectField("Target Face Renderer", targetFaceRenderer, typeof(SkinnedMeshRenderer), true);
             targetBodyRenderer = (SkinnedMeshRenderer)EditorGUILayout.ObjectField("Target Body Renderer", targetBodyRenderer, typeof(SkinnedMeshRenderer), true);
             EditorGUILayout.Space(5);
@@ -64,12 +81,6 @@ namespace WataOfuton.Tools.MCP_MergeNeck
                 ApplyDiffData();
             }
             EditorGUILayout.Space(5);
-        }
-
-        public static void CheckForUpdate(CheckForUpdate.VersionInfo info, bool isShow)
-        {
-            isShowUpdateMessage = isShow;
-            versionInfo = info;
         }
 
         /// <summary>
@@ -116,9 +127,9 @@ namespace WataOfuton.Tools.MCP_MergeNeck
 
             // (2) 差分を適用
             // 顔に差分適用
-            Mesh faceFinalMesh = MCP_MergeNeckCore.ApplyTriangleDiffData(targetFaceRenderer, triangleDiffDataAll.faceTriangles);
+            Mesh faceFinalMesh = MCP_MergeNeckCore.ApplyTriangleDiffData(targetFaceRenderer, triangleDiffDataAll.faceTriangles, avatarRoot.localScale);
             // 体に差分適用
-            Mesh bodyFinalMesh = MCP_MergeNeckCore.ApplyTriangleDiffData(targetBodyRenderer, triangleDiffDataAll.bodyTriangles);
+            Mesh bodyFinalMesh = MCP_MergeNeckCore.ApplyTriangleDiffData(targetBodyRenderer, triangleDiffDataAll.bodyTriangles, avatarRoot.localScale);
 
             // (3) 仕上がったメッシュをフォルダに .asset で保存
             SaveMeshToFolder(faceFinalMesh, folder);
@@ -126,7 +137,6 @@ namespace WataOfuton.Tools.MCP_MergeNeck
 
             Debug.Log("[ApplyTriangleDiffData] 差分の適用が完了しました。");
         }
-
 
         /// <summary>
         /// メッシュを指定フォルダ内に .asset ファイルとして保存する。
@@ -160,5 +170,33 @@ namespace WataOfuton.Tools.MCP_MergeNeck
             Debug.Log($"[ApplyTriangleDiffData] Meshを保存しました: {savePath}");
         }
 
+        /// <summary>
+        /// 再帰的に Transform をたどり、指定名の SkinnedMeshRenderer を返す
+        /// </summary>
+        private static SkinnedMeshRenderer FindRendererRecursive(Transform current, string targetName)
+        {
+            if (current == null) return null;
+
+            // 名前が一致したら SkinnedMeshRenderer を返す（無ければ null）
+            if (current.name.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                return current.GetComponent<SkinnedMeshRenderer>();
+            }
+
+            // 子を再帰的に探索
+            foreach (Transform child in current)
+            {
+                var result = FindRendererRecursive(child, targetName);
+                if (result != null) return result;
+            }
+
+            return null; // 見つからなかった
+        }
+
+        public static void CheckForUpdate(CheckForUpdate.VersionInfo info, bool isShow)
+        {
+            isShowUpdateMessage = isShow;
+            versionInfo = info;
+        }
     }
 }

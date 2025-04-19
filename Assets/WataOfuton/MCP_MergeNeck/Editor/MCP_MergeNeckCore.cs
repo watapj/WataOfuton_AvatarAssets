@@ -8,7 +8,7 @@ namespace WataOfuton.Tools.MCP_MergeNeck
     {
         private static float baryEpsilon = 1e-4f; // バリセントリック計算時の誤差許容値
 
-        public static void ApplyDiffDataNDMF(SkinnedMeshRenderer targetFaceRenderer, SkinnedMeshRenderer targetBodyRenderer, TriangleDiffDataAll triangleDiffDataAll)
+        public static void ApplyDiffDataNDMF(SkinnedMeshRenderer targetFaceRenderer, SkinnedMeshRenderer targetBodyRenderer, TriangleDiffDataAll triangleDiffDataAll, Vector3 scale)
         {
             if (triangleDiffDataAll == null)
             {
@@ -22,14 +22,14 @@ namespace WataOfuton.Tools.MCP_MergeNeck
             }
 
             // 顔に差分適用
-            Mesh faceFinalMesh = ApplyTriangleDiffData(targetFaceRenderer, triangleDiffDataAll.faceTriangles);
+            Mesh faceFinalMesh = ApplyTriangleDiffData(targetFaceRenderer, triangleDiffDataAll.faceTriangles, scale);
             // 体に差分適用
-            Mesh bodyFinalMesh = ApplyTriangleDiffData(targetBodyRenderer, triangleDiffDataAll.bodyTriangles);
+            Mesh bodyFinalMesh = ApplyTriangleDiffData(targetBodyRenderer, triangleDiffDataAll.bodyTriangles, scale);
 
             Debug.Log("[ApplyTriangleDiffData] 差分の適用が完了しました。");
         }
 
-        public static Mesh ApplyTriangleDiffData(SkinnedMeshRenderer skinned, TriangleDiff[] triDiffs)
+        public static Mesh ApplyTriangleDiffData(SkinnedMeshRenderer skinned, TriangleDiff[] triDiffs, Vector3 scale)
         {
             Mesh userMesh = skinned.sharedMesh;
             if (userMesh == null)
@@ -97,7 +97,9 @@ namespace WataOfuton.Tools.MCP_MergeNeck
                 if (found)
                 {
                     // 頂点座標の適用 (ワールド座標 → ローカル座標)
-                    Vector3 wpos = skinnedTransform.localToWorldMatrix.MultiplyPoint3x4(origVerts[i]) + interpolatedDiff;
+                    // Vector3 wpos = skinnedTransform.localToWorldMatrix.MultiplyPoint3x4(origVerts[i]) + interpolatedDiff;
+                    Vector3 scaledPosDelta = Vector3.Scale(interpolatedDiff, scale); // アバターの Scale を反映
+                    Vector3 wpos = skinnedTransform.localToWorldMatrix.MultiplyPoint3x4(origVerts[i]) + scaledPosDelta;
                     newVerts[i] = skinnedTransform.worldToLocalMatrix.MultiplyPoint3x4(wpos);
 
                     // 法線の適用 (ワールド座標 → ローカル座標)
