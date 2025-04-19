@@ -40,15 +40,11 @@ namespace WataOfuton.Tools.RemoveMeshByBlendshape.Editor
             // }
             // EditorGUILayout.Space();
 
-            // EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_target);
-            // if (EditorGUI.EndChangeCheck())
-            // {
             comp.GetSMR();
             smr = (SkinnedMeshRenderer)_target.objectReferenceValue;
             mesh = smr.sharedMesh;
             _isSelected.arraySize = mesh.blendShapeCount;
-            // }
 
             _weightThreshold.floatValue = EditorGUILayout.Slider("Weight Threshould", _weightThreshold.floatValue, 0f, 100f);
 

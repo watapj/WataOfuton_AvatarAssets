@@ -161,12 +161,8 @@ namespace WataOfuton.Tools.RemoveMeshByBlendshape
             // BlendShape再構築
             RebuildBlendShapes(originalMesh, newMesh, oldToNewIndexMap);
 
-            newMesh.RecalculateBounds();
-            newMesh.RecalculateNormals();
-
             _target.sharedMesh = newMesh;
             Debug.Log($"New mesh applied: {newVerticesList.Count} vertices, {newSubMeshTriangles.Count} submeshes.");
-
         }
 
         private void RebuildBlendShapes(Mesh originalMesh, Mesh newMesh, Dictionary<int, int> oldToNewIndexMap)
@@ -207,6 +203,5 @@ namespace WataOfuton.Tools.RemoveMeshByBlendshape
             }
         }
     }
-
 }
 #endif

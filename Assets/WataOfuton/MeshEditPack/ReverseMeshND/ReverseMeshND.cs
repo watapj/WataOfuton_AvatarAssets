@@ -5,12 +5,24 @@ using UnityEditor;
 using VRC.SDKBase;
 using UnityEngine.Rendering;
 using System.Linq;
+using System.IO;
 
 namespace WataOfuton.Tools.ReverseMeshND
 {
     public class ReverseMeshND : MonoBehaviour, IEditorOnly
     {
         [SerializeField] public bool _isReversed;
+        [SerializeField] public Mesh[] _origMesh;
+
+        public void GetMesh()
+        {
+            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
+            _origMesh = new Mesh[smrs.Length];
+            for (int i = 0; i < smrs.Length; i++)
+            {
+                _origMesh[i] = smrs[i].sharedMesh;
+            }
+        }
 
         public void TryReverseMeshND()
         {
@@ -18,6 +30,9 @@ namespace WataOfuton.Tools.ReverseMeshND
             var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
             foreach (var smr in smrs)
                 Undo.RegisterCompleteObjectUndo(smr, "Remove Mesh");
+
+            if (_origMesh == null || _origMesh.Length == 0)
+                GetMesh();
 
             FlipAllChildSMR();
 
@@ -240,8 +255,6 @@ namespace WataOfuton.Tools.ReverseMeshND
             {
                 kvp.Key.transform.rotation = kvp.Value;
             }
-
-            // Debug.Log("一時的なスケール反転状態の頂点を最終メッシュに反映しました。");
         }
 
         static void FlipTransform(Transform t)
@@ -254,6 +267,44 @@ namespace WataOfuton.Tools.ReverseMeshND
             localEuler.y = -localEuler.y;
             localEuler.z = -localEuler.z;
             t.localEulerAngles = localEuler;
+        }
+
+        public void SaveMesh()
+        {
+            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
+
+            for (int i = 0; i < _origMesh.Length; i++)
+            {
+                mySaveAssets(_origMesh[i], smrs[i], "ReverseMeshND");
+            }
+        }
+
+
+        public static void mySaveAssets(Mesh originMesh, SkinnedMeshRenderer smr, string directoryName)
+        {
+            string fileName = smr.transform.name + ".asset";
+            // FBXが配置されているフォルダのパスを取得
+            string fbxFolderPath = Path.GetDirectoryName(AssetDatabase.GetAssetPath(originMesh));
+
+            // "directoryName" ディレクトリパスを作成
+            string bodyMorphFolderPath = Path.Combine(fbxFolderPath, directoryName);
+
+            // フォルダの親が "directoryName" でない場合のみ、"directoryName" ディレクトリを作成
+            if (!fbxFolderPath.EndsWith(directoryName))
+            {
+                if (!AssetDatabase.IsValidFolder(bodyMorphFolderPath))
+                {
+                    AssetDatabase.CreateFolder(fbxFolderPath, directoryName);
+                }
+                string filePath = Path.Combine(bodyMorphFolderPath, fileName);
+                AssetDatabase.CreateAsset(smr.sharedMesh, filePath);
+            }
+            else
+            {
+                // Meshを保存
+                string filePath = Path.Combine(fbxFolderPath, fileName);
+                AssetDatabase.CreateAsset(smr.sharedMesh, filePath);
+            }
         }
     }
 

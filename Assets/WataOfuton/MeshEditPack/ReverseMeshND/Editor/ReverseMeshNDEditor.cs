@@ -12,11 +12,13 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
     {
         ReverseMeshND comp;
         SerializedProperty _isReversed;
+        SerializedProperty _origMesh;
 
         void OnEnable()
         {
             comp = target as ReverseMeshND;
             _isReversed = serializedObject.FindProperty(nameof(ReverseMeshND._isReversed));
+            _origMesh = serializedObject.FindProperty(nameof(ReverseMeshND._origMesh));
         }
 
         public override void OnInspectorGUI()
@@ -40,6 +42,11 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
                      + "NDMF を使って Build 時に動作します.";
             EditorGUILayout.HelpBox(text, MessageType.Info);
             EditorGUILayout.Space();
+
+            if (GUILayout.Button("Save Mesh"))
+            {
+                comp.SaveMesh();
+            }
 
             if (GUI.changed)
             {
