@@ -195,7 +195,16 @@ namespace WataOfuton.Tools.ReverseMeshND
                 }
 
                 // バインドポーズ再計算
-                workingMesh.bindposes = smr.bones.Select(b => b.worldToLocalMatrix * smr.transform.localToWorldMatrix).ToArray();
+                var bones = smr.bones;
+                var bindposes = new Matrix4x4[bones.Length];
+                var rootToWorld = smr.transform.localToWorldMatrix;
+                for (int i = 0; i < bones.Length; ++i)
+                {
+                    Transform bone = bones[i];
+                    // bone が null の場合は元の bindpose を使うか、単に identity を入れる
+                    bindposes[i] = (bone ? bone.worldToLocalMatrix : Matrix4x4.identity) * rootToWorld;
+                }
+                workingMesh.bindposes = bindposes;
 
                 // BlendShape 以外をコピーする.
                 Mesh newMesh = Instantiate(workingMesh);
