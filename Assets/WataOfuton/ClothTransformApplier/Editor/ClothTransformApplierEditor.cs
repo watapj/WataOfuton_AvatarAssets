@@ -1,4 +1,5 @@
-﻿using UnityEditor;
+﻿#if UNITY_EDITOR
+using UnityEditor;
 using UnityEngine;
 using UnityEditorInternal;
 using System.Linq;
@@ -21,6 +22,123 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
         SerializedProperty _isFixScaleAdjuster;
         private ReorderableList reorderableList;
         private bool isDisplaySettings;
+        private static bool isShowUpdateMessage;
+        private static CheckForUpdate.VersionInfo versionInfo;
+
+
+        /// <summary>
+        /// 外部スクリプトから呼び出す共通 API。
+        /// <summary>
+        public static void DrawPresetWithAlterith(ClothTransformApplier applier, ref int targetIndex)
+        {
+            GUILayout.BeginVertical("ClothTransformApplier", "window");
+
+            string error = "";
+            if (applier == null)
+            {
+                error = "[ClothTransformApplier] ClothTransformApplier not found";
+            }
+            else if (applier.transformGroups == null || applier.transformGroups.Count == 0)
+            {
+                error = "[ClothTransformApplier] PresetGroups is Empty";
+            }
+
+            if (error == "")
+            {
+                DrawGroupSelector(applier, ref targetIndex);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(error, MessageType.Error);
+            }
+
+            GUILayout.EndVertical();
+        }
+
+        private static void DrawGroupSelector(ClothTransformApplier applier, ref int targetIndex)
+        {
+            SerializedObject so = new SerializedObject(applier);
+            SerializedProperty groupsProp = so.FindProperty(nameof(applier.transformGroups));
+
+            int count = groupsProp.arraySize;
+
+            // インデックスをレンジ内に拘束
+            targetIndex = Mathf.Clamp(targetIndex, 0, count - 1);
+
+            EditorGUILayout.Space(2);
+
+            //-------------------- 見出し + ▲▼ボタン --------------------
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label($"Select Preset. ({targetIndex + 1}/{count})  (Read Only)", GUILayout.ExpandWidth(true));
+
+                if (GUILayout.Button("▲", GUILayout.Width(34)))
+                    targetIndex = (targetIndex - 1 + count) % count;
+
+                if (GUILayout.Button("▼", GUILayout.Width(34)))
+                    targetIndex = (targetIndex + 1) % count;
+            }
+
+            //-------------------- 選択中の TransformGroup を 1 件だけ表示 --------------------
+            var element = groupsProp.GetArrayElementAtIndex(targetIndex);
+            var nameProp = element.FindPropertyRelative("Name");
+            var presetPrefabProp = element.FindPropertyRelative("presetPrefab");
+            var isFoldoutOpenProp = element.FindPropertyRelative("isFoldoutOpen");
+            var blendShapeSetProp = element.FindPropertyRelative("blendShapeSet");
+            var isDiffModeProp = element.FindPropertyRelative("isDiffMode");
+
+            // PresetPrefab のチェック　上下矢印は出したい
+            if (presetPrefabProp.objectReferenceValue == null)
+            {
+                EditorGUILayout.HelpBox("[ClothTransformApplier] PresetPrefab is Empty", MessageType.Error);
+                return;
+            }
+
+            // EditorGUI.BeginDisabledGroup(true);
+            using (new EditorGUILayout.VerticalScope("HelpBox", GUILayout.ExpandWidth(true)))
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    // Nameフィールド
+                    EditorGUILayout.LabelField("Name", GUILayout.Width(60));
+                    EditorGUILayout.TextField(nameProp.stringValue, GUILayout.Width(120));
+                    // presetPrefab フィールド
+                    EditorGUILayout.ObjectField(presetPrefabProp.objectReferenceValue, typeof(GameObject), true);
+                }
+
+                EditorGUI.indentLevel++;
+                EditorGUILayout.Toggle("Difference Mode", isDiffModeProp.boolValue);
+
+                EditorGUILayout.Foldout(isFoldoutOpenProp.boolValue, "BlendShapeSet");
+                if (isFoldoutOpenProp.boolValue)
+                {
+                    EditorGUI.indentLevel++;
+                    // BlendShapeSetリストを描画
+                    for (int i = 0; i < blendShapeSetProp.arraySize; i++)
+                    {
+                        var blendShapeElement = blendShapeSetProp.GetArrayElementAtIndex(i);
+                        var namePropInBlendShape = blendShapeElement.FindPropertyRelative("name");
+                        var valuePropInBlendShape = blendShapeElement.FindPropertyRelative("value");
+
+                        using (new EditorGUILayout.HorizontalScope())
+                        {
+                            // Nameフィールド
+                            EditorGUILayout.LabelField("Name" + (i + 1).ToString(), GUILayout.Width(100));
+
+                            // NameとValueを描画
+                            EditorGUILayout.PropertyField(namePropInBlendShape, GUIContent.none);
+                            EditorGUILayout.DelayedFloatField(valuePropInBlendShape, GUIContent.none);
+                        }
+                    }
+                    EditorGUI.indentLevel--;
+                }
+                EditorGUI.indentLevel--;
+            }
+            // EditorGUI.EndDisabledGroup();
+
+            return;
+        }
+
 
         void OnEnable()
         {
@@ -65,9 +183,7 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
                 nameProp.stringValue = EditorGUI.TextField(new Rect(rect.x + 45, rect.y, 120, EditorGUIUtility.singleLineHeight), nameProp.stringValue);
 
                 // presetPrefab フィールド
-                // EditorGUI.BeginChangeCheck();
                 presetPrefabProp.objectReferenceValue = (GameObject)EditorGUI.ObjectField(new Rect(rect.x + 170, rect.y, rect.width - 230, EditorGUIUtility.singleLineHeight), presetPrefabProp.objectReferenceValue, typeof(GameObject), true);
-                // if (EditorGUI.EndChangeCheck())
 
                 // Apply ボタン
                 if (GUI.Button(new Rect(rect.x + rect.width - 55, rect.y, 55, EditorGUIUtility.singleLineHeight), "Apply"))
@@ -90,7 +206,7 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
                         group.blendShapeSet.Add(new ClothTransformApplier.BlendShapeSet(blendShapeName, blendShapeValue));
                     }
 
-                    comp.ApplyClothSettings(group);
+                    comp.ApplyClothSettings(group, null);
                 }
 
                 // 差分モード
@@ -188,10 +304,12 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
         }
         void OnDisable()
         {
+            comp = null;
             EditorApplication.update -= OnEditorUpdate;
         }
         void OnEditorUpdate()
         {
+            if (comp == null) return;
             // このオブジェクトはアバターの配下において Transform がデフォルトである前提で動作するためそれを強制する.
             if (comp.transform.parent != null)
             {
@@ -210,62 +328,8 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
 
             serializedObject.Update();
 
-            isDisplaySettings = EditorGUILayout.Foldout(isDisplaySettings, "基本設定を表示する.");
-            if (isDisplaySettings)
-            {
-                string text = "";
-
-                using (new EditorGUILayout.VerticalScope("HelpBox", GUILayout.ExpandWidth(true)))
-                {
-                    EditorGUI.indentLevel++;
-                    EditorGUILayout.PropertyField(_skipComponentList, new GUIContent("Skip Copy Component Name."), true);
-                    EditorGUI.indentLevel--;
-                    // if (_skipComponentList.isExpanded)
-                    {
-                        text = "このリストに記載した Component はコピーしません. （検索には部分一致を含みます）";
-                        EditorGUILayout.HelpBox(text, MessageType.Info);
-                    }
-
-                    EditorGUILayout.Space(5);
-                    _isUseMergeArmature.boolValue = EditorGUILayout.Toggle("MA Setup Outfit.", _isUseMergeArmature.boolValue);
-                    text = "Modular Avatar の 'Setup Outfit' を実行します.";
-                    EditorGUILayout.HelpBox(text, MessageType.Info);
-                    if (_isUseMergeArmature.boolValue)
-                    {
-                        _isRemoveMeshSettings.boolValue = EditorGUILayout.Toggle("Remove MA Mesh Settings.", _isRemoveMeshSettings.boolValue);
-                        text = "衣装に自動で生成される Modular Avatar の 'Mesh Settings' を削除します.";
-                        EditorGUILayout.HelpBox(text, MessageType.Info);
-
-                        _isUseCopyScaleAdjuster.boolValue = EditorGUILayout.Toggle("Copy Scale Adjuster.", _isUseCopyScaleAdjuster.boolValue);
-                        text = "Numeira.CopyScaleAdjuster を実行します（事前にインポートされている場合のみ動作します）.";
-                        EditorGUILayout.HelpBox(text, MessageType.Info);
-                    }
-
-                    EditorGUILayout.Space(5);
-                    _isFixScaleAdjuster.boolValue = EditorGUILayout.Toggle("Fix Scale Adjuster.", _isFixScaleAdjuster.boolValue);
-                    text = "Preset と衣装の両方に 'Scale Adjuster' がある場合、 Scale の値を自動調整します.";
-                    EditorGUILayout.HelpBox(text, MessageType.Info);
-
-                    EditorGUILayout.Space(5);
-                    _isRenameBreast.boolValue = EditorGUILayout.Toggle("Rename Breast Bone", _isRenameBreast.boolValue);
-                    if (_isRenameBreast.boolValue)
-                    {
-                        EditorGUI.indentLevel++;
-                        _breastLeft.objectReferenceValue = EditorGUILayout.ObjectField("素体左胸ボーン", _breastLeft.objectReferenceValue, typeof(GameObject), true);
-                        _breastRight.objectReferenceValue = EditorGUILayout.ObjectField("素体右胸ボーン", _breastRight.objectReferenceValue, typeof(GameObject), true);
-                        EditorGUI.indentLevel--;
-                    }
-                    text = "この機能は実験的機能です. 衣装の胸ボーン名を素体と一致させるか指定します. 素体や衣装のボーン構成により意図した動作をしない場合があります.";
-                    EditorGUILayout.HelpBox(text, MessageType.Warning);
-
-                    EditorGUILayout.Space(5);
-                    if (GUILayout.Button("Open Utility Window"))
-                    {
-                        ClothTransformApplierUtility.Create();
-                    }
-                }
-            }
-            EditorGUILayout.Space(10);
+            DrawUpdateMessage();
+            DrawBaseSettings();
 
             // ReorderableListの描画
             reorderableList.DoLayoutList();
@@ -273,9 +337,88 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
             serializedObject.ApplyModifiedProperties();
         }
 
+        private void DrawBaseSettings()
+        {
+            isDisplaySettings = EditorGUILayout.Foldout(isDisplaySettings, "基本設定を表示する");
+            if (!isDisplaySettings) return;
+
+            using (new EditorGUILayout.VerticalScope("HelpBox", GUILayout.ExpandWidth(true)))
+            {
+                // Skip Components
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(_skipComponentList, new GUIContent("Skip Copy Component Name"), true);
+                EditorGUI.indentLevel--;
+                EditorGUILayout.HelpBox("このリストに記載した Component はコピーしません（検索には部分一致を含みます）", MessageType.Info);
+
+                EditorGUILayout.Space(5);
+
+                // Merge Armature / Mesh Settings / CopyScaleAdjuster
+                _isUseMergeArmature.boolValue = EditorGUILayout.Toggle("MA Setup Outfit", _isUseMergeArmature.boolValue);
+                EditorGUILayout.HelpBox("Modular Avatar の 'Setup Outfit' を実行します.", MessageType.Info);
+
+                if (_isUseMergeArmature.boolValue)
+                {
+                    _isRemoveMeshSettings.boolValue = EditorGUILayout.Toggle("Remove MA Mesh Settings", _isRemoveMeshSettings.boolValue);
+                    EditorGUILayout.HelpBox("衣装に自動で生成される Modular Avatar の 'Mesh Settings' を削除します.", MessageType.Info);
+
+                    _isUseCopyScaleAdjuster.boolValue = EditorGUILayout.Toggle("Copy Scale Adjuster", _isUseCopyScaleAdjuster.boolValue);
+                    EditorGUILayout.HelpBox("Numeira.CopyScaleAdjuster を実行します（事前にインポートされている場合のみ動作します）.", MessageType.Info);
+                }
+
+                EditorGUILayout.Space(5);
+
+                // Fix Scale Adjuster
+                _isFixScaleAdjuster.boolValue = EditorGUILayout.Toggle("Fix Scale Adjuster", _isFixScaleAdjuster.boolValue);
+                EditorGUILayout.HelpBox("Preset と衣装の両方に 'Scale Adjuster' がある場合、Scale の値を自動調整します.", MessageType.Info);
+
+                EditorGUILayout.Space(5);
+
+                // Rename Breast
+                _isRenameBreast.boolValue = EditorGUILayout.Toggle("Rename Breast Bone", _isRenameBreast.boolValue);
+                if (_isRenameBreast.boolValue)
+                {
+                    EditorGUI.indentLevel++;
+                    _breastLeft.objectReferenceValue = EditorGUILayout.ObjectField("素体左胸ボーン", _breastLeft.objectReferenceValue, typeof(GameObject), true);
+                    _breastRight.objectReferenceValue = EditorGUILayout.ObjectField("素体右胸ボーン", _breastRight.objectReferenceValue, typeof(GameObject), true);
+                    EditorGUI.indentLevel--;
+                }
+                EditorGUILayout.HelpBox(
+                    "実験的機能です. 衣装の胸ボーン名を素体と一致させるか指定します. 素体や衣装のボーン構成により意図した動作をしない場合があります.",
+                    MessageType.Warning);
+
+                EditorGUILayout.Space(5);
+
+                if (GUILayout.Button("Open Utility Window"))
+                    ClothTransformApplierUtility.Create();
+            }
+            EditorGUILayout.Space(10);
+        }
+
+        private void DrawUpdateMessage()
+        {
+            if (!isShowUpdateMessage) return;
+
+            using (new EditorGUILayout.VerticalScope("HelpBox", GUILayout.ExpandWidth(true)))
+            {
+                EditorGUILayout.HelpBox(
+                                $"新しいバージョン {versionInfo.version} が利用可能です！ 詳細は Booth をご確認ください.",
+                                MessageType.Info);
+
+                if (GUILayout.Button("Open Booth"))
+                {
+                    Application.OpenURL(versionInfo.releaseURL);
+                }
+            }
+            EditorGUILayout.Space();
+        }
+        public static void CheckForUpdate(CheckForUpdate.VersionInfo info, bool isShow)
+        {
+            isShowUpdateMessage = isShow;
+            versionInfo = info;
+        }
 
         // Reference : https://karanokan.info/2020/06/07/post-4953/#outline__2
-        private float CustomSlider(Rect rect, float val, float left_val, float right_val)
+        private static float CustomSlider(Rect rect, float val, float left_val, float right_val)
         {
             int control_id = GUIUtility.GetControlID(FocusType.Passive);
             Event ev = Event.current; // 現在のイベントを取得
@@ -354,3 +497,4 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
         }
     }
 }
+#endif

@@ -1,11 +1,14 @@
+#if UNITY_EDITOR
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using System.Linq;
 using System.IO;
-// using nadena.dev.modular_avatar.core;
-// using nadena.dev.modular_avatar.core.editor;
+using System.Reflection;
+using nadena.dev.modular_avatar.core;
+using nadena.dev.modular_avatar.core.editor;
+using UnityEditor.Presets;
 
 namespace WataOfuton.Tools.ClothTransformApplier.Editor
 {
@@ -174,13 +177,14 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
             targetI.transform.localPosition = -preset.transform.position;
             targetI.transform.localScale = ClothTransformApplier.DivideVector3(Vector3.one, preset.transform.localScale);
 
-            GetBoneComponents(targetI.transform, boneList, targetBoneList, "bone_", "");
+            GetBoneComponents(targetI.transform, boneList, targetBoneList, "bone_", "", preset.transform, targetI.transform);
             SavePrefabAssets(preset, targetI, newPresetName, "Presets");
 
             DestroyImmediate(targetI);
         }
 
-        private void GetBoneComponents(Transform _parent, List<ClothTransformApplier.BoneList> _boneList, string[][] targetBoneList, string prefix, string suffix)
+        private void GetBoneComponents(Transform _parent, List<ClothTransformApplier.BoneList> _boneList, string[][] targetBoneList, string prefix, string suffix,
+                                       Transform preset, Transform target)
         {
             if (_parent == null) return;
 
@@ -193,7 +197,7 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
                 {
                     foreach (var component in bone.components)
                     {
-                        ClothTransformApplier.CopyComponent(component, _parent, skipComponentList, selectedAxisIndex, multiplier);
+                        CopyComponent(component, _parent, skipComponentList, selectedAxisIndex, multiplier, preset, target);
                     }
                 }
             }
@@ -203,7 +207,7 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
             // 子オブジェクトを再帰的に処理
             foreach (Transform child in _parent)
             {
-                GetBoneComponents(child, _boneList, targetBoneList, prefix, suffix);
+                GetBoneComponents(child, _boneList, targetBoneList, prefix, suffix, preset, target);
             }
         }
 
@@ -282,5 +286,107 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
             Selection.activeObject = newPrefab;
             EditorGUIUtility.PingObject(newPrefab);
         }
+
+
+        private static void CopyComponent(Component source, Transform target, List<string> skipList, int selectedAxisIndex, float multiplier,
+                                          Transform sourceRoot, Transform targetRoot)
+        {
+            // Transform をコピー
+            if (source is Transform sourceTransform)
+            {
+                Transform targetTransform = target.transform;
+
+                // https://light11.hatenadiary.com/entry/2019/04/18/202742
+                var origTransform = PrefabUtility.GetCorrespondingObjectFromSource(sourceTransform);
+                ClothTransformApplier.TransformDiff diff = new ClothTransformApplier.TransformDiff
+                {
+                    pos = sourceTransform.localPosition - origTransform.localPosition,
+                    rot = sourceTransform.rotation * Quaternion.Inverse(origTransform.rotation),
+                };
+
+                // 差分を逆に適用
+                targetTransform.localPosition -= diff.pos;
+                targetTransform.rotation = targetTransform.rotation * diff.rot;
+                targetTransform.localScale = ClothTransformApplier.DivideVector3(targetTransform.localScale, sourceTransform.localScale);
+
+                // 大体が Preset よりちょっと小さくなるので、試しにこれで拡大してみる.
+                var scale = targetTransform.localScale;
+                switch (selectedAxisIndex)
+                {
+                    case 0: // X を選択
+                        scale.y *= multiplier;
+                        scale.z *= multiplier;
+                        break;
+                    case 1: // Y を選択
+                        scale.x *= multiplier;
+                        scale.z *= multiplier;
+                        break;
+                    case 2: // Z を選択
+                        scale.x *= multiplier;
+                        scale.y *= multiplier;
+                        break;
+                }
+                targetTransform.localScale = scale;
+
+                return;
+            }
+
+            // Skip List をスキップ
+            var type = source.GetType();
+            foreach (var skip in skipList)
+            {
+                if (type.Name.IndexOf(skip, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    // Debug.Log($"[Cloth Transform Applier] Skip Copy '{type.Name}' in '{target.name}'.");
+                    return;
+                }
+            }
+
+            if (source is ModularAvatarScaleAdjuster scaleAdjuster)
+            {
+                ModularAvatarScaleAdjuster targetComponent = target.GetComponent<ModularAvatarScaleAdjuster>();
+
+                if (targetComponent != null) // すでにコンポーネントが存在する場合
+                {
+                    // targetのScaleにsourceのScaleを除算
+                    targetComponent.Scale = ClothTransformApplier.DivideVector3(targetComponent.Scale, scaleAdjuster.Scale);
+                }
+                else
+                {
+                    // コンポーネントがない場合、新規に追加してから値をコピー
+                    targetComponent = Undo.AddComponent<ModularAvatarScaleAdjuster>(target.gameObject);
+                    targetComponent.Scale = scaleAdjuster.Scale;
+                }
+                return;
+            }
+
+            // Transform 以外のComponent をコピー
+            if (target.GetComponent(type) == null)
+            {
+                Undo.AddComponent(target.gameObject, type); // AddComponentの代わりにUndo.AddComponentを使用
+            }
+            Component copy = target.GetComponent(type);
+
+            //シリアライズ済みフィールドを丸ごとコピー
+            EditorUtility.CopySerialized(source, copy);
+
+            // Object 参照をターゲット階層に置き換え
+            var so = new SerializedObject(copy);
+            var prop = so.GetIterator();
+
+            while (prop.Next(true))
+            {
+                if (prop.propertyType != SerializedPropertyType.ObjectReference) continue;
+
+                var obj = prop.objectReferenceValue;
+                if (obj == null) continue;
+
+                var newObj = ClothTransformApplier.RemapSingleReference(obj, sourceRoot, targetRoot);
+                if (newObj != obj)
+                    prop.objectReferenceValue = newObj;
+            }
+            so.ApplyModifiedProperties();
+        }
     }
 }
+#endif
