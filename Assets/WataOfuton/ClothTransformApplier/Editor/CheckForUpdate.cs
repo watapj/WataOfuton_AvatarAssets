@@ -15,7 +15,7 @@ namespace WataOfuton.Tools.ClothTransformApplier.Editor
         }
 
         private const string VersionJsonUrl = "https://raw.githubusercontent.com/watapj/WataOfuton_AvatarAssets/main/Assets/WataOfuton/ClothTransformApplier/version.json"; // GitHubのversion.jsonのURL
-        private static string currentVersion = "2025.07.11"; // 現在のローカルバージョン
+        private static string currentVersion = "2025.07.12"; // 現在のローカルバージョン
 
 
         [InitializeOnLoadMethod]

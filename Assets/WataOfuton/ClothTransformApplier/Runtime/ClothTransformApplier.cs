@@ -11,6 +11,7 @@ using nadena.dev.modular_avatar.core;
 using nadena.dev.modular_avatar.core.editor;
 using VRC.SDK3.Dynamics.PhysBone.Components;
 using System.IO;
+using UnityEditor.SceneManagement;
 
 namespace WataOfuton.Tools.ClothTransformApplier
 {
@@ -262,6 +263,7 @@ namespace WataOfuton.Tools.ClothTransformApplier
 
                 SetBoneComponents(cloth, boneList, targetBoneList, cloth, armature);
                 ApplyBlendShapeValues(cloth, transformGroup.blendShapeSet);
+                EditorSceneManager.MarkSceneDirty(cloth.gameObject.scene);
             }
 
             Debug.Log("[Cloth Transform Applier] Apply Cloth Transform.");
