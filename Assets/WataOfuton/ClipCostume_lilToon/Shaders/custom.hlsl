@@ -161,10 +161,12 @@
 
 #define BEFORE_MAIN \
     ClipCostume(fd);
-    
+
 #define BEFORE_OUTLINE_COLOR \
     ClipCostume(fd);
-    // discard;
-    
+
 #define BEFORE_FUR \
+    ClipCostume(fd);
+
+#define BEFORE_SHADOW \
     ClipCostume(fd);

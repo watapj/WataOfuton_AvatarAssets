@@ -15,7 +15,7 @@ namespace WataOfuton.Tools.ClipCostumeSetting.Editor
         }
 
         private const string VersionJsonUrl = "https://raw.githubusercontent.com/watapj/WataOfuton_AvatarAssets/main/Assets/WataOfuton/ClipCostume/version.json"; // GitHubのversion.jsonのURL
-        private static string currentVersion = "2024.12.23"; // 現在のローカルバージョン
+        private static string currentVersion = "2025.07.26"; // 現在のローカルバージョン
 
 
         [InitializeOnLoadMethod]
