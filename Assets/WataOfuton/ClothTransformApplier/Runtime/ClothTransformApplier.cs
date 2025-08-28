@@ -200,8 +200,11 @@ namespace WataOfuton.Tools.ClothTransformApplier
                 {
                     SetupOutfit.SetupOutfitUI(cloth.gameObject);
 
+                    EditorUtility.SetDirty(cloth.gameObject);
+                    EditorSceneManager.MarkSceneDirty(cloth.gameObject.scene);
+
                     var merge = cloth.GetComponentInChildren<ModularAvatarMergeArmature>();
-                    if (merge == null) break;
+                    if (merge == null) continue;
 
                     if (isImportCopyScaleAdjuster)
                     {
@@ -263,6 +266,8 @@ namespace WataOfuton.Tools.ClothTransformApplier
 
                 SetBoneComponents(cloth, boneList, targetBoneList, cloth, armature);
                 ApplyBlendShapeValues(cloth, transformGroup.blendShapeSet);
+                // シーン上のオブジェクトの場合はシーンもダーティに
+                EditorUtility.SetDirty(cloth.gameObject);
                 EditorSceneManager.MarkSceneDirty(cloth.gameObject.scene);
             }
 
@@ -561,10 +566,7 @@ namespace WataOfuton.Tools.ClothTransformApplier
 
         private static void ApplyBlendShapeValues(Transform target, List<BlendShapeSet> blendShapeSet)
         {
-            if (blendShapeSet == null || blendShapeSet.Count == 0)
-            {
-                return;
-            }
+            if (blendShapeSet == null || blendShapeSet.Count == 0) return;
 
             // 対象Transformのすべての子孫からSkinnedMeshRendererを取得
             SkinnedMeshRenderer[] skinnedMeshRenderers = target.GetComponentsInChildren<SkinnedMeshRenderer>(true);

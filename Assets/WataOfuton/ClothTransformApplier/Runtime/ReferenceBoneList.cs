@@ -27,6 +27,7 @@ namespace WataOfuton.Tools.ClothTransformApplier
             {
                 foreach (var bone in boneList[i])
                 {
+                    // UnityEngine.Debug.Log($"[CTA Debug] Bone: '{bone}' // Pattern: '{pattern}' // Num:'{i}'");
                     if (Regex.IsMatch(bone, pattern, RegexOptions.IgnoreCase))
                     {
                         // UnityEngine.Debug.Log($"[CTA Debug] Bone: '{bone}' // Pattern: '{pattern}' // Num:'{i}'");
@@ -39,7 +40,8 @@ namespace WataOfuton.Tools.ClothTransformApplier
 
         private static string ConvertToRegexPattern(string boneName)
         {
-            string escapedBoneName = Regex.Escape(boneName).Replace("_", "[._]").Replace("\\.", "[._]");
+            var target = "[._ ]";
+            string escapedBoneName = Regex.Escape(boneName).Replace("\\ ", target).Replace("\\_", target).Replace("\\.", target);
             return $"^{escapedBoneName}$";
         }
 

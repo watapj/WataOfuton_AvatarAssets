@@ -9,33 +9,40 @@ namespace WataOfuton.Tools
     {
         private const string MENU_ITEM_PATH = "Window/WataOfuton/Material Property Batch Setter";
         private Vector2 scrollPosition;
-
         private float[] forcedValues;
         private bool[] checkEnables;
-        public static readonly string[,] targetParamNames = new string[,]{{"_LightMinLimit",     "明るさの下限"},
-                                                                          {"_LightMaxLimit",      "明るさの上限"},
-                                                                          {"_MonochromeLighting", "ライトのモノクロ化"},
-                                                                          {"_ShadowEnvStrength",  "影色への環境光影響度"},
-                                                                          {"_AsUnlit",            "Unlit化"},
-                                                                          {"_MatCapEnableLighting",  "[MatCap]ライトの明るさを反映"},
-                                                                          {"_MatCap2ndEnableLighting",  "[MatCap2nd]ライトの明るさを反映"},
-                                                                          {"_RimEnableLighting",  "[リムライト]ライトの明るさを反映"},
-                                                                          {"_GlitterEnableLighting",  "[ラメ]ライトの明るさを反映"},
-                                                                          {"_OutLineEnableLighting",  "[アウトライン]ライトの明るさを反映"},
-                                                                         };
-        private static readonly float[,] sliderSet = new float[,]{{0f, 1f},
-                                                                  {0f, 10f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                  {0f, 1f},
-                                                                 };
-        private static readonly float[] defaultValues = new float[] { 0.05f, 1f, 0f, 0f, 0f, 1f, 1f, 1f, 1f, 1f };
-
+        public static readonly string[,] targetParamNames = new string[,]{
+                {"_LightMinLimit",                 "明るさの下限"},
+                {"_LightMaxLimit",                 "明るさの上限"},
+                {"_MonochromeLighting",            "ライトのモノクロ化"},
+                {"_ShadowEnvStrength",             "影色への環境光影響度"},
+                {"_AsUnlit",                       "Unlit化"},
+                {"_MatCapEnableLighting",          "[MatCap]ライトの明るさを反映"},
+                {"_MatCap2ndEnableLighting",       "[MatCap2nd]ライトの明るさを反映"},
+                {"_RimEnableLighting",             "[リムライト]ライトの明るさを反映"},
+                {"_GlitterEnableLighting",         "[ラメ]ライトの明るさを反映"},
+                {"_OutLineEnableLighting",         "[アウトライン]ライトの明るさを反映"},
+                {"_ReflectionCubeEnableLighting",  "[反射]ライトの明るさを反映(FallBack)"},
+                {"_EnvRimBorder",                  "[VRCLV] Rim Border"},
+                {"_EnvRimBlur",                    "[VRCLV] Rim Blur"},
+            };
+        private static readonly float[,] sliderSet = new float[,]{
+                {0f, 1f},
+                {0f, 10f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 1f},
+                {0f, 3f},
+                {0f, 1f},
+            };
+        private static readonly float[] defaultValues = new float[] { 0.05f, 1f, 0f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f, 0.85f, 0.35f };
+        private static int paramCount = targetParamNames.GetLength(0);
 
         [MenuItem(MENU_ITEM_PATH)]
         public static void ShowWindow()
@@ -45,8 +52,8 @@ namespace WataOfuton.Tools
 
         private void OnEnable()
         {
-            checkEnables = new bool[defaultValues.Length];
-            forcedValues = new float[defaultValues.Length];
+            checkEnables = new bool[paramCount];
+            forcedValues = new float[paramCount];
             LoadForcedValues();
         }
 
@@ -68,7 +75,7 @@ namespace WataOfuton.Tools
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
             EditorGUILayout.Space(8);
-            for (int i = 0; i < forcedValues.Length; i++)
+            for (int i = 0; i < paramCount; i++)
             {
                 WataOfutonEditorUtility.HorizontalFieldFloatSlider(targetParamNames[i, 1], ref forcedValues[i], ref checkEnables[i], sliderSet[i, 0], sliderSet[i, 1]);
             }
@@ -97,9 +104,7 @@ namespace WataOfuton.Tools
             // デバッグ用
             // EditorGUILayout.Space(5);
             // if (GUILayout.Button("Clear Keys. (for Debug)"))
-            // {
             //     ClearForcedValues();
-            // }
 
             EditorGUILayout.Space(20);
             EditorGUILayout.EndScrollView();
@@ -107,7 +112,7 @@ namespace WataOfuton.Tools
 
         private void LoadForcedValues()
         {
-            for (int i = 0; i < forcedValues.Length; i++)
+            for (int i = 0; i < paramCount; i++)
             {
                 if (EditorPrefs.HasKey("MaterialPropertyBatchSetter." + targetParamNames[i, 0]))
                 {
@@ -133,7 +138,7 @@ namespace WataOfuton.Tools
 
         private void SaveForcedValues()
         {
-            for (int i = 0; i < forcedValues.Length; i++)
+            for (int i = 0; i < paramCount; i++)
             {
                 EditorPrefs.SetFloat("MaterialPropertyBatchSetter." + targetParamNames[i, 0], forcedValues[i]);
             }
@@ -142,17 +147,18 @@ namespace WataOfuton.Tools
         }
         private void InitForcedValues()
         {
-            for (int i = 0; i < forcedValues.Length; i++)
+            for (int i = 0; i < paramCount; i++)
             {
                 EditorPrefs.SetFloat("MaterialPropertyBatchSetter." + targetParamNames[i, 0], defaultValues[i]);
             }
-            WataOfutonEditorUtility.SaveBoolArray("MaterialPropertyBatchSetter.CheckEnables", new bool[checkEnables.Length]);
+            WataOfutonEditorUtility.SaveBoolArray("MaterialPropertyBatchSetter.CheckEnables", new bool[paramCount]);
             Debug.Log("[Material Property Batch Setter] Settings Initialized.");
         }
 
+        // デバッグ用
         private void ClearForcedValues()
         {
-            for (int i = 0; i < forcedValues.Length; i++)
+            for (int i = 0; i < paramCount; i++)
             {
                 EditorPrefs.DeleteKey("MaterialPropertyBatchSetter." + targetParamNames[i, 0]);
             }
@@ -164,7 +170,9 @@ namespace WataOfuton.Tools
 
     public static class MaterialPropertyBatchSetterMenu
     {
-        [MenuItem("Assets/WataOfuton/Apply to All Materials in Folder (MaterialPropertyBatchSetter)", false, 1200)]
+        private const string MENU_ITEM_PATH = "Assets/WataOfuton/Apply to All Materials in Folder (MaterialPropertyBatchSetter)";
+
+        [MenuItem(MENU_ITEM_PATH, false, 1200)]
         private static void ApplyToAllMaterialsInFolder()
         {
             // 選択されたフォルダのパスを取得
@@ -176,30 +184,35 @@ namespace WataOfuton.Tools
             }
 
             string[,] targetParamNames = MaterialPropertyBatchSetterWindow.targetParamNames;
-            float[] forcedValues = new float[targetParamNames.Length / 2];
-            for (int i = 0; i < forcedValues.Length; i++)
+            int paramCount = targetParamNames.GetLength(0);
+            float[] forcedValues = new float[paramCount];
+            for (int i = 0; i < paramCount; i++)
             {
                 forcedValues[i] = EditorPrefs.GetFloat("MaterialPropertyBatchSetter." + targetParamNames[i, 0]);
             }
 
             // 指定されたフォルダ内のすべてのマテリアルに対して処理を実行
-            string[] fileEntries = Directory.GetFiles(selectedFolderPath, "*.mat", SearchOption.AllDirectories);
-            foreach (string filePath in fileEntries)
+            string[] guids = AssetDatabase.FindAssets("t:Material", new[] { selectedFolderPath });
+            int total = guids.Length;
+            for (int i = 0; i < total; i++)
             {
-                Material mat = AssetDatabase.LoadAssetAtPath<Material>(filePath);
+                string assetPath = AssetDatabase.GUIDToAssetPath(guids[i]);
+                Material mat = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
                 if (mat != null)
                 {
+                    // Undo.RecordObject(mat, "Batch Material Property Change");
                     MaterialPropertyBatchSetter.ApplyPropertiesToMaterial(mat, targetParamNames, forcedValues);
                 }
+                EditorUtility.DisplayProgressBar("Material Batch Setter", $"Processing {i + 1}/{total}", (float)(i + 1) / total);
             }
-
-            Debug.Log("[Material Property Batch Setter] Applied properties to all materials in folder: " + selectedFolderPath);
+            EditorUtility.ClearProgressBar();
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[Material Property Batch Setter] Applied properties to {total} materials in folder: {selectedFolderPath}");
         }
 
-
-        // メニューオプションの有効/無効を切り替え
-        [MenuItem("Assets/MaterialPropertyBatchSetter/Apply to All Materials in Folder", true, 1200)]
-        private static bool ApplyToAllMaterialsInFolderValidation()
+        // メニュー有効／無効判定
+        [MenuItem(MENU_ITEM_PATH, true)]
+        private static bool ValidateApplyToAllMaterialsInFolder()
         {
             // フォルダが選択されているかどうかをチェック
             return Selection.activeObject != null && AssetDatabase.IsValidFolder(AssetDatabase.GetAssetPath(Selection.activeObject));
@@ -228,12 +241,12 @@ namespace WataOfuton.Tools
             Selection.selectionChanged -= OnSelectionChanged;
         }
 
-        static void OnSelectionChanged()
+        private static void OnSelectionChanged()
         {
             string[,] targetParamNames = MaterialPropertyBatchSetterWindow.targetParamNames;
-
-            float[] forcedValues = new float[targetParamNames.Length / 2];
-            for (int i = 0; i < forcedValues.Length; i++)
+            int paramCount = targetParamNames.GetLength(0);
+            float[] forcedValues = new float[paramCount];
+            for (int i = 0; i < paramCount; i++)
             {
                 forcedValues[i] = EditorPrefs.GetFloat("MaterialPropertyBatchSetter." + targetParamNames[i, 0]);
             }
@@ -252,27 +265,29 @@ namespace WataOfuton.Tools
         {
             bool[] enables = WataOfutonEditorUtility.LoadBoolArray("MaterialPropertyBatchSetter.CheckEnables");
 
-            for (int i = 0; i < targetParamNames.Length / 2; i++)
+            int paramCount = targetParamNames.GetLength(0);
+            for (int i = 0; i < paramCount; i++)
             {
                 if (!enables[i]) continue;
                 if (!mat.HasProperty(targetParamNames[i, 0])) continue;
                 if (mat.GetFloat(targetParamNames[i, 0]) == forcedValues[i]) continue;
 
                 mat.SetFloat(targetParamNames[i, 0], forcedValues[i]);
-                EditorUtility.SetDirty(mat); // 変更を保存
                 Debug.Log("[Material Property Batch Setter] Set " + targetParamNames[i, 1] + " of " + mat.name + " to " + forcedValues[i]);
             }
+            EditorUtility.SetDirty(mat); // 変更を保存
         }
     }
 
     public class MaterialPropertyBatchSetterImportProcessor : AssetPostprocessor
     {
-        static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
+        static void OnPostprocessAllAssets(string[] importedAssets, string[] _, string[] __, string[] ___)
         {
             // 必要なパラメータを取得
             string[,] targetParamNames = MaterialPropertyBatchSetterWindow.targetParamNames;
-            float[] forcedValues = new float[targetParamNames.Length / 2];
-            for (int i = 0; i < forcedValues.Length; i++)
+            int paramCount = targetParamNames.GetLength(0);
+            float[] forcedValues = new float[paramCount];
+            for (int i = 0; i < paramCount; i++)
             {
                 forcedValues[i] = EditorPrefs.GetFloat("MaterialPropertyBatchSetter." + targetParamNames[i, 0]);
             }
