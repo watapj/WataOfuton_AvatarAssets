@@ -12,13 +12,11 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
     {
         ReverseMeshND comp;
         SerializedProperty _isReversed;
-        SerializedProperty _origMesh;
 
         void OnEnable()
         {
             comp = target as ReverseMeshND;
             _isReversed = serializedObject.FindProperty(nameof(ReverseMeshND._isReversed));
-            _origMesh = serializedObject.FindProperty(nameof(ReverseMeshND._origMesh));
         }
 
         public override void OnInspectorGUI()
@@ -35,7 +33,7 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
 
             if (GUILayout.Button("Preview Reverse Mesh"))
             {
-                comp.TryReverseMeshND();
+                comp.ExecuteReverseMeshND();
             }
 
             var text = "プレビュー後は 'Ctrl + Z '(Undo) で元に戻せます. \n"

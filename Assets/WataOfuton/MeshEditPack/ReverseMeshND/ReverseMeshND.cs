@@ -24,19 +24,43 @@ namespace WataOfuton.Tools.ReverseMeshND
             }
         }
 
-        public void TryReverseMeshND()
+        public void ExecuteReverseMeshND()
         {
-            Undo.RegisterCompleteObjectUndo(this, "Remove Mesh");
-            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
-            foreach (var smr in smrs)
-                Undo.RegisterCompleteObjectUndo(smr, "Remove Mesh");
+            Undo.IncrementCurrentGroup();
+            int undoGroup = Undo.GetCurrentGroup();
 
-            if (_origMesh == null || _origMesh.Length == 0)
+            // Undo登録: 自身の状態
+            Undo.RegisterCompleteObjectUndo(this, "ReverseMeshND State");
+            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
+            // Undo登録: SkinnedMeshRenderer本体
+            foreach (var smr in smrs)
+                Undo.RegisterCompleteObjectUndo(smr, "ReverseMeshND SMR");
+
+            // Undo登録: 各SkinnedMeshRendererのメッシュ
+            foreach (var smr in smrs)
+            {
+                if (smr.sharedMesh != null)
+                    Undo.RegisterCompleteObjectUndo(smr.sharedMesh, "ReverseMeshND Mesh");
+            }
+
+            // Undo登録: 各ボーン
+            foreach (var smr in smrs)
+            {
+                foreach (var bone in smr.bones)
+                {
+                    if (bone != null)
+                        Undo.RegisterCompleteObjectUndo(bone, "ReverseMeshND Bone");
+                }
+            }
+
+            if (_origMesh == null || _origMesh.Length == 0 || _origMesh.Length != smrs.Length)
                 GetMesh();
 
             FlipAllChildSMR();
 
             _isReversed = true;
+
+            Undo.CollapseUndoOperations(undoGroup);
         }
 
         void FlipAllChildSMR()
@@ -57,26 +81,35 @@ namespace WataOfuton.Tools.ReverseMeshND
                 originalScale = s;
             }
 
-            // 一時的にスケール反転
+            // 再計算フローに備えて、現在のシーンポーズ（SMRとボーンのワールドTRS）を保存
+            Dictionary<SkinnedMeshRenderer, Quaternion> smrWorldRotations = new Dictionary<SkinnedMeshRenderer, Quaternion>();
+            Dictionary<SkinnedMeshRenderer, Vector3> smrWorldPositions = new Dictionary<SkinnedMeshRenderer, Vector3>();
+            Dictionary<Transform, Vector3> originalBoneWorldPositions = new Dictionary<Transform, Vector3>();
+            Dictionary<Transform, Quaternion> originalBoneWorldRotations = new Dictionary<Transform, Quaternion>();
+            Dictionary<Transform, Vector3> originalBoneLocalScales = new Dictionary<Transform, Vector3>();
+            HashSet<Transform> uniqueBones = new HashSet<Transform>();
+            foreach (var smr in smrs)
+            {
+                if (!smrWorldRotations.ContainsKey(smr)) smrWorldRotations[smr] = smr.transform.rotation;
+                if (!smrWorldPositions.ContainsKey(smr)) smrWorldPositions[smr] = smr.transform.position;
+                foreach (var bone in smr.bones)
+                {
+                    if (bone == null) continue;
+                    if (!originalBoneWorldPositions.ContainsKey(bone)) originalBoneWorldPositions[bone] = bone.position;
+                    if (!originalBoneWorldRotations.ContainsKey(bone)) originalBoneWorldRotations[bone] = bone.rotation;
+                    if (!originalBoneLocalScales.ContainsKey(bone)) originalBoneLocalScales[bone] = bone.localScale;
+                    uniqueBones.Add(bone);
+                }
+            }
+
+            // 一時的にスケール反転（メッシュ座標取得のため）
             transform.localScale = new Vector3(-originalScale.x, originalScale.y, originalScale.z);
 
             // ワールド回転情報の記録（ボーン用）
             Dictionary<Transform, Quaternion> boneWorldRotations = new Dictionary<Transform, Quaternion>();
-            // 反転状態での SkinnedMeshRenderer 回転情報
-            Dictionary<SkinnedMeshRenderer, Quaternion> smrWorldRotations = new Dictionary<SkinnedMeshRenderer, Quaternion>();
-            Dictionary<SkinnedMeshRenderer, Vector3> smrWorldPositions = new Dictionary<SkinnedMeshRenderer, Vector3>();
 
             foreach (var smr in smrs)
             {
-                if (!smrWorldRotations.ContainsKey(smr))
-                {
-                    smrWorldRotations[smr] = smr.transform.rotation;
-                }
-                if (!smrWorldPositions.ContainsKey(smr))
-                {
-                    smrWorldPositions[smr] = smr.transform.position;
-                }
-
                 foreach (var bone in smr.bones)
                 {
                     if (bone != null && !boneWorldRotations.ContainsKey(bone))
@@ -139,7 +172,7 @@ namespace WataOfuton.Tools.ReverseMeshND
             foreach (var smr in smrs)
             {
                 var originalMesh = smr.sharedMesh;
-                if (originalMesh == null) continue;
+                if (originalMesh == null || !smrMeshData.ContainsKey(smr)) continue;
 
                 // BlendShape の weight 一時保存とリセット
                 int blendCount = originalMesh.blendShapeCount;
@@ -170,13 +203,18 @@ namespace WataOfuton.Tools.ReverseMeshND
                     wTangents[i] = new Vector4(tangentDir.x, tangentDir.y, tangentDir.z, wTangents[i].w);
                 }
 
-                // ここでX軸反転済みになっている状態をメッシュに焼き込むため、インデックスを再度反転
-                // （scaleを戻した段階で表裏が逆になっている可能性があるため、頂点は左右反転された状態を保持するが、
-                //  面方向(インデックス順)も裏返す）
+                // インデックス反転（三角形ごとに入れ替え）
                 for (int si = 0; si < workingMesh.subMeshCount; si++)
                 {
                     var indices = subMeshIndices[si];
-                    System.Array.Reverse(indices);
+                    if (indices == null || indices.Length % 3 != 0) continue;
+                    for (int t = 0; t < indices.Length; t += 3)
+                    {
+                        // 0,1,2 -> 1,0,2
+                        int tmp = indices[t];
+                        indices[t] = indices[t + 1];
+                        indices[t + 1] = tmp;
+                    }
                     workingMesh.SetTriangles(indices, si);
                 }
 
@@ -184,7 +222,28 @@ namespace WataOfuton.Tools.ReverseMeshND
                 workingMesh.normals = wNormals;
                 workingMesh.tangents = wTangents;
 
-                // ボーン反転処理
+                // まずボーンを「元のバインドポーズ（rest）」へ戻す（このSMRのbindposesを使用）
+                var bones = smr.bones;
+                var bindposesOfSmr = originalMesh.bindposes;
+                var rootToWorldPre = smr.transform.localToWorldMatrix;
+                for (int i = 0; i < bones.Length && i < bindposesOfSmr.Length; ++i)
+                {
+                    var bone = bones[i];
+                    if (bone == null) continue;
+                    var invBind = bindposesOfSmr[i].inverse; // = rootWorld^-1 * boneWorld
+                    Matrix4x4 targetWorld = rootToWorldPre * invBind; // 期待するバインド時のboneのworld行列
+                    // 親に対するローカル行列へ変換してからTRS分解（スケールも正確に復元）
+                    Matrix4x4 parentWorld = bone.parent ? bone.parent.localToWorldMatrix : Matrix4x4.identity;
+                    Matrix4x4 targetLocal = parentWorld.inverse * targetWorld;
+                    if (DecomposeMatrix(targetLocal, out var lPos, out var lRot, out var lScale))
+                    {
+                        bone.localPosition = lPos;
+                        bone.localRotation = lRot;
+                        bone.localScale = lScale;
+                    }
+                }
+
+                // ボーン反転処理（rest 状態に対して適用）
                 foreach (var bone in smr.bones)
                 {
                     if (bone != null && !processedBones.Contains(bone))
@@ -194,8 +253,7 @@ namespace WataOfuton.Tools.ReverseMeshND
                     }
                 }
 
-                // バインドポーズ再計算
-                var bones = smr.bones;
+                // バインドポーズ再計算（null ボーンを考慮）
                 var bindposes = new Matrix4x4[bones.Length];
                 var rootToWorld = smr.transform.localToWorldMatrix;
                 for (int i = 0; i < bones.Length; ++i)
@@ -249,13 +307,11 @@ namespace WataOfuton.Tools.ReverseMeshND
                 var b = bounds.center;
                 b.x = -b.x;
                 bounds.center = b;
+                // 構造体なので必ず再代入する
+                smr.localBounds = bounds;
             }
 
-            // 記録したワールド回転を再適用
-            foreach (var kvp in boneWorldRotations)
-            {
-                kvp.Key.rotation = kvp.Value;
-            }
+            // 先にSMRのワールド位置/回転を復元
             foreach (var kvp in smrWorldPositions)
             {
                 kvp.Key.transform.position = kvp.Value;
@@ -264,6 +320,52 @@ namespace WataOfuton.Tools.ReverseMeshND
             {
                 kvp.Key.transform.rotation = kvp.Value;
             }
+
+            // もとのシーンポーズのボーン ワールドTRSを復元（親→子の順で安定）
+            int GetDepth(Transform t)
+            {
+                int d = 0; var p = t; while (p != null) { d++; p = p.parent; }
+                return d;
+            }
+            var bonesToRestore = originalBoneWorldPositions.Keys.ToList();
+            bonesToRestore.Sort((a, b) => GetDepth(a).CompareTo(GetDepth(b)));
+            foreach (var bone in bonesToRestore)
+            {
+                if (bone == null) continue;
+                var pos = originalBoneWorldPositions.TryGetValue(bone, out var p) ? p : bone.position;
+                var rot = originalBoneWorldRotations.TryGetValue(bone, out var r) ? r : bone.rotation;
+                bone.SetPositionAndRotation(pos, rot);
+                // スケールも元に戻す（ローカル）
+                if (originalBoneLocalScales.TryGetValue(bone, out var s))
+                {
+                    bone.localScale = s;
+                }
+            }
+        }
+
+        // バインドポーズ復元用: 行列をTRSに分解
+        static bool DecomposeMatrix(Matrix4x4 m, out Vector3 position, out Quaternion rotation, out Vector3 scale)
+        {
+            position = m.GetColumn(3);
+            Vector3 x = new Vector3(m.m00, m.m10, m.m20);
+            Vector3 y = new Vector3(m.m01, m.m11, m.m21);
+            Vector3 z = new Vector3(m.m02, m.m12, m.m22);
+            float sx = x.magnitude; float sy = y.magnitude; float sz = z.magnitude;
+            if (sx < 1e-8f || sy < 1e-8f || sz < 1e-8f)
+            {
+                rotation = Quaternion.identity; scale = Vector3.one; return false;
+            }
+            // 正規化して回転行列を構築
+            Vector3 xn = x / sx; Vector3 yn = y / sy; Vector3 zn = z / sz;
+            // 右手系補正（手性が負ならZ軸を反転してスケール符号に反映）
+            float handed = Vector3.Dot(Vector3.Cross(xn, yn), zn);
+            if (handed < 0f)
+            {
+                sz = -sz; zn = -zn;
+            }
+            rotation = Quaternion.LookRotation(zn, yn);
+            scale = new Vector3(sx, sy, sz);
+            return true;
         }
 
         static void FlipTransform(Transform t)
@@ -271,11 +373,10 @@ namespace WataOfuton.Tools.ReverseMeshND
             Vector3 localPos = t.localPosition;
             localPos.x = -localPos.x;
             t.localPosition = localPos;
-
-            Vector3 localEuler = t.localEulerAngles;
-            localEuler.y = -localEuler.y;
-            localEuler.z = -localEuler.z;
-            t.localEulerAngles = localEuler;
+            Quaternion localRot = t.localRotation;
+            localRot.y = -localRot.y;
+            localRot.z = -localRot.z;
+            t.localRotation = localRot;
         }
 
         public void SaveMesh()

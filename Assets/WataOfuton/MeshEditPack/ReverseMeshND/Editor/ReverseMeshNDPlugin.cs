@@ -18,7 +18,7 @@ namespace WataOfuton.Tools.ReverseMeshND.Editor
                 {
                     if (!c._isReversed)
                     {
-                        c.TryReverseMeshND();
+                        c.ExecuteReverseMeshND();
                     }
                     Object.DestroyImmediate(c);
                 }
