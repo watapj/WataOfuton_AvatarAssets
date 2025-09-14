@@ -14,9 +14,13 @@ namespace WataOfuton.Tools.ReverseMeshND
         [SerializeField] public bool _isReversed;
         [SerializeField] public Mesh[] _origMesh;
 
-        public void GetMesh()
+        SkinnedMeshRenderer[] GetTargetSMRs()
         {
-            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
+            return GetComponentsInChildren<SkinnedMeshRenderer>(false);
+        }
+
+        public void GetMesh(SkinnedMeshRenderer[] smrs)
+        {
             _origMesh = new Mesh[smrs.Length];
             for (int i = 0; i < smrs.Length; i++)
             {
@@ -28,44 +32,38 @@ namespace WataOfuton.Tools.ReverseMeshND
         {
             Undo.IncrementCurrentGroup();
             int undoGroup = Undo.GetCurrentGroup();
-
-            // Undo登録: 自身の状態
-            Undo.RegisterCompleteObjectUndo(this, "ReverseMeshND State");
-            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
-            // Undo登録: SkinnedMeshRenderer本体
-            foreach (var smr in smrs)
-                Undo.RegisterCompleteObjectUndo(smr, "ReverseMeshND SMR");
-
-            // Undo登録: 各SkinnedMeshRendererのメッシュ
+            Undo.SetCurrentGroupName("ReverseMeshND");
+            // Undoの対象を重複なく収集して一括登録（多重登録によるオーバーフロー回避）
+            var smrs = GetTargetSMRs();
+            var undoSet = new HashSet<Object> { this };
             foreach (var smr in smrs)
             {
-                if (smr.sharedMesh != null)
-                    Undo.RegisterCompleteObjectUndo(smr.sharedMesh, "ReverseMeshND Mesh");
+                if (smr) undoSet.Add(smr);
             }
-
-            // Undo登録: 各ボーン
             foreach (var smr in smrs)
             {
+                if (smr == null || smr.bones == null) continue;
                 foreach (var bone in smr.bones)
                 {
-                    if (bone != null)
-                        Undo.RegisterCompleteObjectUndo(bone, "ReverseMeshND Bone");
+                    if (bone) undoSet.Add(bone);
                 }
             }
+            // メッシュアセット自体は編集しない（新規生成を割り当てる）ため、ここでは登録しない
+            Undo.RegisterCompleteObjectUndo(undoSet.ToArray(), "ReverseMeshND Objects");
 
             if (_origMesh == null || _origMesh.Length == 0 || _origMesh.Length != smrs.Length)
-                GetMesh();
+                GetMesh(smrs);
 
-            FlipAllChildSMR();
+            FlipAllChildSMR(smrs);
 
             _isReversed = true;
 
             Undo.CollapseUndoOperations(undoGroup);
         }
 
-        void FlipAllChildSMR()
+        // NOTE : 法線・接線の反転処理は不要なので実装しない
+        void FlipAllChildSMR(SkinnedMeshRenderer[] smrs)
         {
-            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
             if (smrs.Length == 0)
             {
                 Debug.LogWarning("SkinnedMeshRendererが子階層に見つかりませんでした。");
@@ -84,40 +82,14 @@ namespace WataOfuton.Tools.ReverseMeshND
             // 再計算フローに備えて、現在のシーンポーズ（SMRとボーンのワールドTRS）を保存
             Dictionary<SkinnedMeshRenderer, Quaternion> smrWorldRotations = new Dictionary<SkinnedMeshRenderer, Quaternion>();
             Dictionary<SkinnedMeshRenderer, Vector3> smrWorldPositions = new Dictionary<SkinnedMeshRenderer, Vector3>();
-            Dictionary<Transform, Vector3> originalBoneWorldPositions = new Dictionary<Transform, Vector3>();
-            Dictionary<Transform, Quaternion> originalBoneWorldRotations = new Dictionary<Transform, Quaternion>();
-            Dictionary<Transform, Vector3> originalBoneLocalScales = new Dictionary<Transform, Vector3>();
-            HashSet<Transform> uniqueBones = new HashSet<Transform>();
             foreach (var smr in smrs)
             {
                 if (!smrWorldRotations.ContainsKey(smr)) smrWorldRotations[smr] = smr.transform.rotation;
                 if (!smrWorldPositions.ContainsKey(smr)) smrWorldPositions[smr] = smr.transform.position;
-                foreach (var bone in smr.bones)
-                {
-                    if (bone == null) continue;
-                    if (!originalBoneWorldPositions.ContainsKey(bone)) originalBoneWorldPositions[bone] = bone.position;
-                    if (!originalBoneWorldRotations.ContainsKey(bone)) originalBoneWorldRotations[bone] = bone.rotation;
-                    if (!originalBoneLocalScales.ContainsKey(bone)) originalBoneLocalScales[bone] = bone.localScale;
-                    uniqueBones.Add(bone);
-                }
             }
 
             // 一時的にスケール反転（メッシュ座標取得のため）
             transform.localScale = new Vector3(-originalScale.x, originalScale.y, originalScale.z);
-
-            // ワールド回転情報の記録（ボーン用）
-            Dictionary<Transform, Quaternion> boneWorldRotations = new Dictionary<Transform, Quaternion>();
-
-            foreach (var smr in smrs)
-            {
-                foreach (var bone in smr.bones)
-                {
-                    if (bone != null && !boneWorldRotations.ContainsKey(bone))
-                    {
-                        boneWorldRotations[bone] = bone.rotation;
-                    }
-                }
-            }
 
             // 反転状態でメッシュ頂点をワールド座標で取得
             Dictionary<SkinnedMeshRenderer, (Vector3[], Vector3[], Vector4[], int[][])> smrMeshData
@@ -167,7 +139,52 @@ namespace WataOfuton.Tools.ReverseMeshND
 
             // ここから、取得したワールド座標の頂点/法線等を、「通常状態での」ローカル座標に変換してメッシュへ適用
             // 通常状態のtransformでlocalToWorldMatrixが異なるため、その逆行列を使ってローカル座標へ戻す
-            HashSet<Transform> processedBones = new HashSet<Transform>();
+            // まずは全SMRで共有される骨を一度だけ"rest"へ戻し、全体を反転する。
+            // これをSMRごとに行うと、先に処理したSMRの骨反転が後のSMR処理で上書きされるため、順序依存の不具合が起きる。
+            var boneRestInfo = new Dictionary<Transform, (Matrix4x4 bindpose, Matrix4x4 rootToWorld)>();
+            foreach (var smr in smrs)
+            {
+                var mesh = smr.sharedMesh;
+                var bones = smr.bones;
+                if (mesh == null || bones == null) continue;
+                var binds = mesh.bindposes;
+                if (binds == null) continue;
+                int n = Mathf.Min(bones.Length, binds.Length);
+                var rootToWorld = smr.transform.localToWorldMatrix;
+                for (int i = 0; i < n; ++i)
+                {
+                    var bone = bones[i];
+                    if (bone == null) continue;
+                    if (!boneRestInfo.ContainsKey(bone))
+                    {
+                        boneRestInfo[bone] = (binds[i], rootToWorld);
+                    }
+                }
+            }
+
+            // 骨をrestへ戻す（各骨につき一度だけ）
+            foreach (var kv in boneRestInfo)
+            {
+                var bone = kv.Key;
+                var bindpose = kv.Value.bindpose;
+                var rootToWorldPre = kv.Value.rootToWorld;
+                var invBind = bindpose.inverse; // = rootWorld^-1 * boneWorld
+                Matrix4x4 targetWorld = rootToWorldPre * invBind; // バインド時のboneのworld行列
+                Matrix4x4 parentWorld = bone.parent ? bone.parent.localToWorldMatrix : Matrix4x4.identity;
+                Matrix4x4 targetLocal = parentWorld.inverse * targetWorld;
+                if (DecomposeMatrix(targetLocal, out var lPos, out var lRot, out var lScale))
+                {
+                    bone.localPosition = lPos;
+                    bone.localRotation = lRot;
+                    bone.localScale = lScale;
+                }
+            }
+
+            // 骨の反転も一度だけ
+            foreach (var bone in boneRestInfo.Keys)
+            {
+                FlipTransform(bone);
+            }
 
             foreach (var smr in smrs)
             {
@@ -222,44 +239,13 @@ namespace WataOfuton.Tools.ReverseMeshND
                 workingMesh.normals = wNormals;
                 workingMesh.tangents = wTangents;
 
-                // まずボーンを「元のバインドポーズ（rest）」へ戻す（このSMRのbindposesを使用）
+                // バインドポーズ再計算（null ボーンを考慮）: 骨はすでに一度だけ反転済み
                 var bones = smr.bones;
-                var bindposesOfSmr = originalMesh.bindposes;
-                var rootToWorldPre = smr.transform.localToWorldMatrix;
-                for (int i = 0; i < bones.Length && i < bindposesOfSmr.Length; ++i)
-                {
-                    var bone = bones[i];
-                    if (bone == null) continue;
-                    var invBind = bindposesOfSmr[i].inverse; // = rootWorld^-1 * boneWorld
-                    Matrix4x4 targetWorld = rootToWorldPre * invBind; // 期待するバインド時のboneのworld行列
-                    // 親に対するローカル行列へ変換してからTRS分解（スケールも正確に復元）
-                    Matrix4x4 parentWorld = bone.parent ? bone.parent.localToWorldMatrix : Matrix4x4.identity;
-                    Matrix4x4 targetLocal = parentWorld.inverse * targetWorld;
-                    if (DecomposeMatrix(targetLocal, out var lPos, out var lRot, out var lScale))
-                    {
-                        bone.localPosition = lPos;
-                        bone.localRotation = lRot;
-                        bone.localScale = lScale;
-                    }
-                }
-
-                // ボーン反転処理（rest 状態に対して適用）
-                foreach (var bone in smr.bones)
-                {
-                    if (bone != null && !processedBones.Contains(bone))
-                    {
-                        FlipTransform(bone);
-                        processedBones.Add(bone);
-                    }
-                }
-
-                // バインドポーズ再計算（null ボーンを考慮）
                 var bindposes = new Matrix4x4[bones.Length];
                 var rootToWorld = smr.transform.localToWorldMatrix;
                 for (int i = 0; i < bones.Length; ++i)
                 {
                     Transform bone = bones[i];
-                    // bone が null の場合は元の bindpose を使うか、単に identity を入れる
                     bindposes[i] = (bone ? bone.worldToLocalMatrix : Matrix4x4.identity) * rootToWorld;
                 }
                 workingMesh.bindposes = bindposes;
@@ -294,6 +280,7 @@ namespace WataOfuton.Tools.ReverseMeshND
                 }
 
                 // メッシュ適用
+                Undo.RegisterCreatedObjectUndo(newMesh, "ReverseMeshND Create Mesh");
                 smr.sharedMesh = newMesh;
 
                 // BlendShapeのweightを元に戻す
@@ -307,7 +294,6 @@ namespace WataOfuton.Tools.ReverseMeshND
                 var b = bounds.center;
                 b.x = -b.x;
                 bounds.center = b;
-                // 構造体なので必ず再代入する
                 smr.localBounds = bounds;
             }
 
@@ -319,27 +305,6 @@ namespace WataOfuton.Tools.ReverseMeshND
             foreach (var kvp in smrWorldRotations)
             {
                 kvp.Key.transform.rotation = kvp.Value;
-            }
-
-            // もとのシーンポーズのボーン ワールドTRSを復元（親→子の順で安定）
-            int GetDepth(Transform t)
-            {
-                int d = 0; var p = t; while (p != null) { d++; p = p.parent; }
-                return d;
-            }
-            var bonesToRestore = originalBoneWorldPositions.Keys.ToList();
-            bonesToRestore.Sort((a, b) => GetDepth(a).CompareTo(GetDepth(b)));
-            foreach (var bone in bonesToRestore)
-            {
-                if (bone == null) continue;
-                var pos = originalBoneWorldPositions.TryGetValue(bone, out var p) ? p : bone.position;
-                var rot = originalBoneWorldRotations.TryGetValue(bone, out var r) ? r : bone.rotation;
-                bone.SetPositionAndRotation(pos, rot);
-                // スケールも元に戻す（ローカル）
-                if (originalBoneLocalScales.TryGetValue(bone, out var s))
-                {
-                    bone.localScale = s;
-                }
             }
         }
 
@@ -381,7 +346,13 @@ namespace WataOfuton.Tools.ReverseMeshND
 
         public void SaveMesh()
         {
-            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(false);
+            var smrs = GetTargetSMRs();
+
+            if (_origMesh == null || _origMesh.Length != smrs.Length)
+            {
+                // 対象のズレを避けるため再取得
+                GetMesh(smrs);
+            }
 
             for (int i = 0; i < _origMesh.Length; i++)
             {
