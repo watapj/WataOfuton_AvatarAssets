@@ -4,7 +4,6 @@ using UnityEditor;
 using UnityEditor.Animations;
 using VRC.SDK3.Avatars.Components;
 using System.Collections.Generic;
-using System.Linq;
 
 [assembly: ExportsPlugin(typeof(WataOfuton.Tools.MMDSetup.Editor.MMDSetupPlugin))]
 
@@ -17,8 +16,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         private static string replacePath;
         private static string origFaceName;
         private static string[] origBodiesName;
-        private static Vector3[] reuseVerticesA, reuseNormalsA, reuseTangentsA;
-        private static Vector3[] reuseVerticesB, reuseNormalsB, reuseTangentsB;
 
         protected override void Configure()
         {
@@ -122,38 +119,71 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 if (MMDSetup.enableGenerateBS)
                 {
                     var smr = face.GetComponent<SkinnedMeshRenderer>();
-                    Mesh mesh = Object.Instantiate(smr.sharedMesh);
+                    Mesh sourceMesh = smr.sharedMesh;
+                    var originalBlendShapeWeightsByName = CaptureBlendShapeWeightsByName(smr, sourceMesh);
+
+                    Mesh mesh = Object.Instantiate(sourceMesh);
                     if (mesh != null)
                     {
                         var blendShapeIndices1 = MMDSetup.blendShapeIndices1;
+                        var blendShapeNames1 = MMDSetup.blendShapeNames1;
                         var blendShapePowers1 = MMDSetup.blendShapePowers1;
                         var blendShapeIndices2 = MMDSetup.blendShapeIndices2;
+                        var blendShapeNames2 = MMDSetup.blendShapeNames2;
                         var blendShapePowers2 = MMDSetup.blendShapePowers2;
                         var enableBlendBS = MMDSetup.enableBlendBS;
                         var enableOverrideBS = MMDSetup.enableOverrideBS;
 
                         string[] mappinglist = BlendShapeMappings.blendShapeMappings4MMD;
 
-                        if (enableOverrideBS.Contains(true))
+                        if (HasAnyTrue(enableOverrideBS))
                         {
+                            // Override対象は「overrideがON」だけでなく「このビルドで実際に再生成するもの」だけに限定する。
+                            // そうしないと、同名BlendShapeが存在するケースで意図せず復元漏れが発生する。
+                            var overrideTargetNames = new HashSet<string>();
+                            for (int i = 0; i < mappinglist.Length; i++)
+                            {
+                                if (!enableOverrideBS[i])
+                                {
+                                    continue;
+                                }
+
+                                // 再生成しない（未選択）の場合は、既存を復元する
+                                int resolvedIndex = ResolveBlendShapeIndex(sourceMesh, blendShapeNames1, blendShapeIndices1, i);
+                                if (resolvedIndex < 0)
+                                {
+                                    continue;
+                                }
+
+                                if (i < blendShapePowers1.Length && blendShapePowers1[i] == 0f)
+                                {
+                                    // 再生成してもゼロウェイトなら実質無効なので、既存を復元する
+                                    continue;
+                                }
+
+                                overrideTargetNames.Add(mappinglist[i]);
+                            }
+
                             // BlendShapeを全削除
                             mesh.ClearBlendShapes();
                             // BlendShapeの数を取得
-                            int originalCount = smr.sharedMesh.blendShapeCount;
+                            int originalCount = sourceMesh.blendShapeCount;
 
                             // MMD関係以外のBlendShapeを復元する
                             for (int i = 0; i < originalCount; i++)
                             {
-                                string shapeName = smr.sharedMesh.GetBlendShapeName(i);
-                                bool isInMMDList; int idxInMMDList;
-                                (isInMMDList, idxInMMDList) = ContainsString(mappinglist, shapeName);
-                                if (isInMMDList && enableOverrideBS[idxInMMDList]) continue;
+                                string shapeName = sourceMesh.GetBlendShapeName(i);
+                                // 再生成対象に含まれる名前は復元しない（後続で作り直す）
+                                if (overrideTargetNames.Contains(shapeName))
+                                {
+                                    continue;
+                                }
 
-                                int vertexCount = smr.sharedMesh.vertexCount;
+                                int vertexCount = sourceMesh.vertexCount;
                                 Vector3[] vertices = new Vector3[vertexCount];
                                 Vector3[] normals = new Vector3[vertexCount];
                                 Vector3[] tangents = new Vector3[vertexCount];
-                                smr.sharedMesh.GetBlendShapeFrameVertices(i, 0, vertices, normals, tangents);
+                                sourceMesh.GetBlendShapeFrameVertices(i, 0, vertices, normals, tangents);
 
                                 mesh.AddBlendShapeFrame(shapeName, 100f, vertices, normals, tangents);
                             }
@@ -163,53 +193,48 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                         {
                             string targetBSName = mappinglist[i];
 
-                            int popupValue1 = blendShapeIndices1[i];
-                            // popupValue1 == 0 -> “----” を選択中 -> スキップ
-                            if (popupValue1 == 0)
+                            // indexではなく名前優先で参照（削除/並べ替えに強くする）
+                            int realIndex1 = ResolveBlendShapeIndex(sourceMesh, blendShapeNames1, blendShapeIndices1, i);
+                            if (realIndex1 < 0 || realIndex1 >= sourceMesh.blendShapeCount)
                             {
-                                // Debug.Log($"[MMDSetup] Skip {targetBSName}");
-                                continue;
-                            }
-
-                            // 1->メッシュ上のインデックス0, 2->1, 3->2...
-                            int realIndex1 = popupValue1 - 1;
-                            if (realIndex1 < 0 || realIndex1 >= smr.sharedMesh.blendShapeCount)
-                            {
-                                // 範囲外 -> スキップ
+                                // 未選択 or 範囲外 -> スキップ
                                 continue;
                             }
 
                             // BlendモードがONなら blendShapeIndices2 も見る
                             if (enableBlendBS[i])
                             {
-                                int popupValue2 = blendShapeIndices2[i];
-                                int realIndex2 = popupValue2 - 1;
-
-                                if (realIndex2 < 0 || realIndex2 >= smr.sharedMesh.blendShapeCount)
+                                int realIndex2 = ResolveBlendShapeIndex(sourceMesh, blendShapeNames2, blendShapeIndices2, i);
+                                if (realIndex2 < 0 || realIndex2 >= sourceMesh.blendShapeCount)
                                 {
                                     // 2番目シェイプがスキップ扱い -> 単独生成
-                                    AddBlendShape4MMD(mesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f);
+                                    AddBlendShape4MMD(mesh, sourceMesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f);
                                 }
                                 else
                                 {
                                     // 2つのBlendShapeを合成
-                                    BlendingBlendShape4MMD(mesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f, realIndex2, blendShapePowers2[i] * 0.01f);
+                                    BlendingBlendShape4MMD(mesh, sourceMesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f, realIndex2, blendShapePowers2[i] * 0.01f);
                                 }
                             }
                             else
                             {
                                 // Blendしない -> 単独生成
-                                AddBlendShape4MMD(mesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f);
+                                AddBlendShape4MMD(mesh, sourceMesh, targetBSName, realIndex1, blendShapePowers1[i] * 0.01f);
                             }
                         }
                     }
                     smr.sharedMesh = mesh;
+                    RestoreBlendShapeWeightsByName(smr, mesh, originalBlendShapeWeightsByName);
                 }
 
                 Object.DestroyImmediate(MMDSetup);
             });
         }
 
+        /// <summary>
+        /// AnimatorStateMachine配下のステートを走査し、アニメーションクリップ内のパス置換を行います。
+        /// サブステートマシンも再帰的に処理します。
+        /// </summary>
         private static void ProcessStateMachine(AnimatorStateMachine stateMachine, List<Transform> bodies, Transform face)
         {
             // 状態の処理
@@ -234,6 +259,10 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             }
         }
 
+        /// <summary>
+        /// AnimationClip内のカーブバインディングのパスを置換します。
+        /// 例: "Armature/Body" を "Body" に置き換える等。
+        /// </summary>
         private static void ReplacePathsInClip(AnimationClip clip, string targetPath, string replaceName)
         {
             // アニメーションクリップ内の全バインディングを取得
@@ -257,6 +286,9 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             }
         }
 
+        /// <summary>
+        /// ルート(AvatarRoot)から見たTransformの相対パスを作成します。
+        /// </summary>
         private static string GetPathToRoot(Transform current, Transform root)
         {
             if (current == null) return "";
@@ -269,33 +301,142 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             return path;
         }
 
-        private static (bool, int) ContainsString(string[] array, string target)
+        /// <summary>
+        /// bool配列にtrueが含まれているか判定します。
+        /// </summary>
+        private static bool HasAnyTrue(bool[] values)
         {
-            for (int i = 0; i < array.Length; i++)
+            if (values == null)
             {
-                if (array[i] == target)
+                return false;
+            }
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (values[i])
                 {
-                    return (true, i);
+                    return true;
                 }
             }
-            return (false, -1);
+            return false;
         }
 
-        private static void PrepareReuseArrays(int vertexCount)
+        /// <summary>
+        /// BlendShape名からインデックスを解決します（完全一致）。
+        /// </summary>
+        private static int FindBlendShapeIndexByName(Mesh mesh, string targetName)
         {
-            // 初回または、vertexCount が変わった場合のみ再確保
-            if (reuseVerticesA == null || reuseVerticesA.Length != vertexCount)
+            if (mesh == null || string.IsNullOrEmpty(targetName))
             {
-                reuseVerticesA = new Vector3[vertexCount];
-                reuseNormalsA = new Vector3[vertexCount];
-                reuseTangentsA = new Vector3[vertexCount];
-                reuseVerticesB = new Vector3[vertexCount];
-                reuseNormalsB = new Vector3[vertexCount];
-                reuseTangentsB = new Vector3[vertexCount];
+                return -1;
+            }
+
+            int blendShapeCount = mesh.blendShapeCount;
+            for (int i = 0; i < blendShapeCount; i++)
+            {
+                if (mesh.GetBlendShapeName(i) == targetName)
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// BlendShapeの参照インデックスを解決します。
+        /// 名前が保存されていれば名前優先、無ければpopup index(1-based)から解決します。
+        /// 未選択または解決不能な場合は-1を返します。
+        /// </summary>
+        private static int ResolveBlendShapeIndex(Mesh mesh, string[] blendShapeNames, int[] blendShapePopupIndices, int mappingIndex)
+        {
+            if (mesh == null)
+            {
+                return -1;
+            }
+
+            // 名前優先
+            if (blendShapeNames != null && mappingIndex >= 0 && mappingIndex < blendShapeNames.Length)
+            {
+                string storedName = blendShapeNames[mappingIndex];
+                if (!string.IsNullOrEmpty(storedName))
+                {
+                    int resolvedIndex = FindBlendShapeIndexByName(mesh, storedName);
+                    return resolvedIndex;
+                }
+            }
+
+            // 互換: popup index(1-based, 0=="----")
+            if (blendShapePopupIndices == null || mappingIndex < 0 || mappingIndex >= blendShapePopupIndices.Length)
+            {
+                return -1;
+            }
+
+            int popupValue = blendShapePopupIndices[mappingIndex];
+            if (popupValue == 0)
+            {
+                return -1;
+            }
+
+            return popupValue - 1;
+        }
+
+        /// <summary>
+        /// SkinnedMeshRendererに保存されているBlendShapeのウェイトを、BlendShape名で退避します。
+        /// BlendShapeのウェイトはindex依存のため、メッシュのBlendShape順序が変わるとズレる問題の対策です。
+        /// </summary>
+        private static Dictionary<string, float> CaptureBlendShapeWeightsByName(SkinnedMeshRenderer skinnedMeshRenderer, Mesh sourceMesh)
+        {
+            if (skinnedMeshRenderer == null || sourceMesh == null)
+            {
+                return new Dictionary<string, float>(0, System.StringComparer.Ordinal);
+            }
+
+            int blendShapeCount = sourceMesh.blendShapeCount;
+            var weightsByName = new Dictionary<string, float>(blendShapeCount, System.StringComparer.Ordinal);
+            for (int i = 0; i < blendShapeCount; i++)
+            {
+                string shapeName = sourceMesh.GetBlendShapeName(i);
+                if (string.IsNullOrEmpty(shapeName))
+                {
+                    continue;
+                }
+                weightsByName[shapeName] = skinnedMeshRenderer.GetBlendShapeWeight(i);
+            }
+            return weightsByName;
+        }
+
+        /// <summary>
+        /// 新しいメッシュ適用後、退避していた「名前→ウェイト」をSkinnedMeshRendererへ復元します。
+        /// </summary>
+        private static void RestoreBlendShapeWeightsByName(SkinnedMeshRenderer skinnedMeshRenderer, Mesh targetMesh, Dictionary<string, float> weightsByName)
+        {
+            if (skinnedMeshRenderer == null || targetMesh == null || weightsByName == null)
+            {
+                return;
+            }
+
+            int blendShapeCount = targetMesh.blendShapeCount;
+            for (int i = 0; i < blendShapeCount; i++)
+            {
+                string shapeName = targetMesh.GetBlendShapeName(i);
+                if (!string.IsNullOrEmpty(shapeName) && weightsByName.TryGetValue(shapeName, out float weight))
+                {
+                    skinnedMeshRenderer.SetBlendShapeWeight(i, weight);
+                }
+                else
+                {
+                    // 旧indexの残留ウェイトが別名へ誤適用されるのを防ぐ
+                    skinnedMeshRenderer.SetBlendShapeWeight(i, 0f);
+                }
             }
         }
 
-        private static void AddBlendShape4MMD(Mesh mesh, string newBlendShapeName, int OrigBlendShapeIndex, float power)
+        /// <summary>
+        /// 元メッシュのBlendShapeフレームを参照し、生成先メッシュへ新規BlendShapeとして追加します。
+        /// Override等で生成先メッシュのBlendShape順序が変わっても、参照元(index)がズレないようにするため
+        /// フレーム取得は常に参照元メッシュ(sourceMesh)から行います。
+        /// </summary>
+        private static void AddBlendShape4MMD(Mesh targetMesh, Mesh sourceMesh, string newBlendShapeName, int origBlendShapeIndex, float power)
         {
             if (power == 0f)
             {
@@ -303,21 +444,41 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 return;
             }
 
-            int vertexCount = mesh.vertexCount;
-            PrepareReuseArrays(vertexCount);
-            // reuseVerticesA / reuseNormalsA / reuseTangentsA にフレームを取得
-            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex, 0, reuseVerticesA, reuseNormalsA, reuseTangentsA);
+            if (targetMesh == null || sourceMesh == null)
+            {
+                Debug.LogWarning($"[MMDSetup] Skip Create BlendShape '{newBlendShapeName}'(Mesh is Null).");
+                return;
+            }
+
+            if (targetMesh.vertexCount != sourceMesh.vertexCount)
+            {
+                Debug.LogWarning($"[MMDSetup] Skip Create BlendShape '{newBlendShapeName}'(Vertex Count Mismatch).");
+                return;
+            }
+
+            int vertexCount = targetMesh.vertexCount;
+
+            // 注意: AddBlendShapeFrame に渡す配列は毎回新規にする。
+            // Unity内部実装の差異により、使い回し配列だと後続処理で内容が上書きされ
+            // 生成済みBlendShapeが汚染される可能性がある。
+            Vector3[] deltaVertices = new Vector3[vertexCount];
+            Vector3[] deltaNormals = new Vector3[vertexCount];
+            Vector3[] deltaTangents = new Vector3[vertexCount];
+            sourceMesh.GetBlendShapeFrameVertices(origBlendShapeIndex, 0, deltaVertices, deltaNormals, deltaTangents);
 
             for (int i = 0; i < vertexCount; i++)
             {
-                reuseVerticesA[i] = reuseVerticesA[i] * power; // power%のウェイトを適用
-                reuseNormalsA[i] = reuseNormalsA[i] * power;
-                reuseTangentsA[i] = reuseTangentsA[i] * power;
+                deltaVertices[i] *= power; // power%のウェイトを適用
+                deltaNormals[i] *= power;
+                deltaTangents[i] *= power;
             }
-            mesh.AddBlendShapeFrame(newBlendShapeName, 100f, reuseVerticesA, reuseNormalsA, reuseTangentsA);
+            targetMesh.AddBlendShapeFrame(newBlendShapeName, 100f, deltaVertices, deltaNormals, deltaTangents);
         }
 
-        private static void BlendingBlendShape4MMD(Mesh mesh, string newBlendShapeName, int OrigBlendShapeIndex1, float power1, int OrigBlendShapeIndex2, float power2)
+        /// <summary>
+        /// 元メッシュの2つのBlendShapeフレームを参照し、指定ウェイトで加算合成した結果を生成先メッシュへ追加します。
+        /// </summary>
+        private static void BlendingBlendShape4MMD(Mesh targetMesh, Mesh sourceMesh, string newBlendShapeName, int origBlendShapeIndex1, float power1, int origBlendShapeIndex2, float power2)
         {
             if (power1 == 0f && power2 == 0f)
             {
@@ -333,19 +494,38 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 Debug.Log($"[MMDSetup] BlendShape2 has Zero Weight for '{newBlendShapeName}'. Using BlendShape1 only.");
             }
 
-            int vertexCount = mesh.vertexCount;
-            PrepareReuseArrays(vertexCount);
-            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex1, 0, reuseVerticesA, reuseNormalsA, reuseTangentsA);
-            mesh.GetBlendShapeFrameVertices(OrigBlendShapeIndex2, 0, reuseVerticesB, reuseNormalsB, reuseTangentsB);
+            if (targetMesh == null || sourceMesh == null)
+            {
+                Debug.LogWarning($"[MMDSetup] Skip Create BlendShape '{newBlendShapeName}'(Mesh is Null).");
+                return;
+            }
+
+            if (targetMesh.vertexCount != sourceMesh.vertexCount)
+            {
+                Debug.LogWarning($"[MMDSetup] Skip Create BlendShape '{newBlendShapeName}'(Vertex Count Mismatch).");
+                return;
+            }
+
+            int vertexCount = targetMesh.vertexCount;
+
+            Vector3[] deltaVerticesA = new Vector3[vertexCount];
+            Vector3[] deltaNormalsA = new Vector3[vertexCount];
+            Vector3[] deltaTangentsA = new Vector3[vertexCount];
+            sourceMesh.GetBlendShapeFrameVertices(origBlendShapeIndex1, 0, deltaVerticesA, deltaNormalsA, deltaTangentsA);
+
+            Vector3[] deltaVerticesB = new Vector3[vertexCount];
+            Vector3[] deltaNormalsB = new Vector3[vertexCount];
+            Vector3[] deltaTangentsB = new Vector3[vertexCount];
+            sourceMesh.GetBlendShapeFrameVertices(origBlendShapeIndex2, 0, deltaVerticesB, deltaNormalsB, deltaTangentsB);
 
             // 加算合成
             for (int i = 0; i < vertexCount; i++)
             {
-                reuseVerticesA[i] = reuseVerticesA[i] * power1 + reuseVerticesB[i] * power2;
-                reuseNormalsA[i] = reuseNormalsA[i] * power1 + reuseNormalsB[i] * power2;
-                reuseTangentsA[i] = reuseTangentsA[i] * power1 + reuseTangentsB[i] * power2;
+                deltaVerticesA[i] = deltaVerticesA[i] * power1 + deltaVerticesB[i] * power2;
+                deltaNormalsA[i] = deltaNormalsA[i] * power1 + deltaNormalsB[i] * power2;
+                deltaTangentsA[i] = deltaTangentsA[i] * power1 + deltaTangentsB[i] * power2;
             }
-            mesh.AddBlendShapeFrame(newBlendShapeName, 100f, reuseVerticesA, reuseNormalsA, reuseTangentsA);
+            targetMesh.AddBlendShapeFrame(newBlendShapeName, 100f, deltaVerticesA, deltaNormalsA, deltaTangentsA);
         }
     }
 }
