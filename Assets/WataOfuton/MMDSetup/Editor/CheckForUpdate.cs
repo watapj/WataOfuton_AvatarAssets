@@ -15,7 +15,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         }
 
         private const string VersionJsonUrl = "https://raw.githubusercontent.com/watapj/WataOfuton_AvatarAssets/main/Assets/WataOfuton/MMDSetup/version.json"; // GitHubのversion.jsonのURL
-        private static string currentVersion = "2025.12.27"; // 現在のローカルバージョン
+        private static string currentVersion = "2026.02.26"; // 現在のローカルバージョン
 
 
         [InitializeOnLoadMethod]

@@ -19,6 +19,11 @@ namespace WataOfuton.Tools.MMDSetup.Editor
 
         protected override void Configure()
         {
+            // staticキャッシュの残留状態によるビルド間汚染を避ける
+            replacePath = string.Empty;
+            origFaceName = string.Empty;
+            origBodiesName = null;
+
             // 顔メッシュと素体メッシュのリネーム処理と
             // アニメーションのリネーム処理の実行場所を別にすることで
             // 他 NDMF ツールとの衝突を回避する試み
@@ -32,9 +37,21 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 }
 
                 var face = MMDSetup.faceMesh;
+                var bodies = MMDSetup.bodyMeshes;
+                bool isFaceMissing = face == null;
+                bool isBodiesMissing = bodies == null || bodies.Count == 0;
+
+                if (isFaceMissing || isBodiesMissing)
+                {
+                    // Inspector 未表示のままビルドされた場合のフォールバック自動検出
+                    Debug.Log("[MMDSetup] Face or Body Meshes unassigned. Attempting auto-detection...");
+                    AutoDetectFaceAndBodies(ctx.AvatarRootObject.transform, MMDSetup);
+                    face = MMDSetup.faceMesh;
+                    bodies = MMDSetup.bodyMeshes ?? new List<Transform>();
+                }
                 if (face == null)
                 {
-                    Debug.LogWarning("[MMDSetup] Face Mesh is Unassigned.");
+                    Debug.LogWarning("[MMDSetup] Face Mesh is Unassigned and auto-detection failed.");
                     Object.DestroyImmediate(MMDSetup);
                     return;
                 }
@@ -44,7 +61,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 {
                     face.SetParent(ctx.AvatarRootObject.transform);
                 }
-                var bodies = MMDSetup.bodyMeshes;
+
                 origBodiesName = new string[bodies.Count];
                 for (int i = 0; i < bodies.Count; i++)
                 {
@@ -72,7 +89,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 var MMDSetup = ctx.AvatarRootObject.GetComponentInChildren<MMDSetup>();
                 if (MMDSetup == null)
                 {
-                    Object.DestroyImmediate(MMDSetup);
                     return;
                 }
 
@@ -84,11 +100,37 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                     return;
                 }
 
-                var bodies = MMDSetup.bodyMeshes;
-                if ((origFaceName != "Body") || replacePath.Contains("/"))
+                var bodies = MMDSetup.bodyMeshes ?? new List<Transform>();
+
+                // Generatingフェーズでのリネーム結果が有効か検証し、無効なら置換処理全体をスキップする
+                bool isPathReplacementNeeded = (origFaceName != "Body") || replacePath.Contains("/");
+                bool isPathReplacementReady = !string.IsNullOrEmpty(replacePath) && origBodiesName != null;
+
+                if (isPathReplacementNeeded && !isPathReplacementReady)
                 {
+                    if (string.IsNullOrEmpty(replacePath))
+                    {
+                        Debug.LogWarning("[MMDSetup] Skip animation path replacement because face path is empty.");
+                    }
+                    if (origBodiesName == null)
+                    {
+                        Debug.LogWarning("[MMDSetup] Skip body path replacement because original body path cache is empty.");
+                    }
+                }
+
+                if (isPathReplacementNeeded && isPathReplacementReady)
+                {
+                    if (origBodiesName.Length != bodies.Count)
+                    {
+                        Debug.LogWarning($"[MMDSetup] Body count ({bodies.Count}) and original path count ({origBodiesName.Length}) mismatch. Processing available entries only.");
+                    }
+
                     var descriptor = ctx.AvatarRootObject.GetComponentInChildren<VRCAvatarDescriptor>();
-                    if (descriptor.baseAnimationLayers == null)
+                    if (descriptor == null)
+                    {
+                        Debug.LogWarning("[MMDSetup] VRCAvatarDescriptor is Null. Skip animation path replacement.");
+                    }
+                    else if (descriptor.baseAnimationLayers == null)
                     {
                         Debug.LogWarning("[MMDSetup] Playable Layers is Null.");
                     }
@@ -109,7 +151,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                                 // 各アニメーションクリップのパスを置き換える
                                 foreach (var layer in controller.layers)
                                 {
-                                    ProcessStateMachine(layer.stateMachine, bodies, face);
+                                    ProcessStateMachine(layer.stateMachine, bodies, face, origBodiesName, replacePath);
                                 }
                             }
                         }
@@ -232,30 +274,78 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         }
 
         /// <summary>
-        /// AnimatorStateMachine配下のステートを走査し、アニメーションクリップ内のパス置換を行います。
+        /// AnimatorStateMachine配下のステートを走査し、各MotionのAnimationClip内のパス置換を行います。
         /// サブステートマシンも再帰的に処理します。
         /// </summary>
-        private static void ProcessStateMachine(AnimatorStateMachine stateMachine, List<Transform> bodies, Transform face)
+        private static void ProcessStateMachine(AnimatorStateMachine stateMachine, List<Transform> bodies, Transform face, string[] originalBodyPaths, string facePath)
         {
-            // 状態の処理
+            if (stateMachine == null)
+            {
+                return;
+            }
+
+            // 各ステートのMotionを処理（AnimationClip / BlendTree 両対応）
             foreach (var state in stateMachine.states)
             {
-                AnimationClip clip = state.state.motion as AnimationClip;
-                if (clip != null)
-                {
-                    for (int i = 0; i < bodies.Count; i++)
-                    {
-                        if (bodies[i].GetInstanceID() == face.GetInstanceID()) continue;
-                        ReplacePathsInClip(clip, origBodiesName[i], $"{rename}{i}");
-                    }
-                    ReplacePathsInClip(clip, replacePath, "Body");
-                }
+                ReplacePathsInMotion(state.state.motion, bodies, face, originalBodyPaths, facePath);
             }
 
             // サブステートマシンの処理
             foreach (var subStateMachine in stateMachine.stateMachines)
             {
-                ProcessStateMachine(subStateMachine.stateMachine, bodies, face);
+                ProcessStateMachine(subStateMachine.stateMachine, bodies, face, originalBodyPaths, facePath);
+            }
+        }
+
+        /// <summary>
+        /// Motion内のAnimationClipに対してパス置換を行います。
+        /// BlendTreeの場合は子Motionを再帰的に辿ります。
+        /// </summary>
+        private static void ReplacePathsInMotion(Motion motion, List<Transform> bodies, Transform face, string[] originalBodyPaths, string facePath)
+        {
+            if (motion is AnimationClip clip)
+            {
+                if (bodies != null && originalBodyPaths != null)
+                {
+                    int replaceTargetCount = bodies.Count;
+                    if (originalBodyPaths.Length < replaceTargetCount)
+                    {
+                        replaceTargetCount = originalBodyPaths.Length;
+                    }
+
+                    for (int i = 0; i < replaceTargetCount; i++)
+                    {
+                        var bodyTransform = bodies[i];
+                        if (bodyTransform == null)
+                        {
+                            continue;
+                        }
+
+                        if (face != null && bodyTransform.GetInstanceID() == face.GetInstanceID())
+                        {
+                            continue;
+                        }
+
+                        string originalBodyPath = originalBodyPaths[i];
+                        if (string.IsNullOrEmpty(originalBodyPath))
+                        {
+                            continue;
+                        }
+
+                        ReplacePathsInClip(clip, originalBodyPath, $"{rename}{i}");
+                    }
+                }
+
+                ReplacePathsInClip(clip, facePath, "Body");
+            }
+            else if (motion is BlendTree blendTree)
+            {
+                // BlendTreeの子Motionを再帰的に処理
+                var children = blendTree.children;
+                for (int i = 0; i < children.Length; i++)
+                {
+                    ReplacePathsInMotion(children[i].motion, bodies, face, originalBodyPaths, facePath);
+                }
             }
         }
 
@@ -265,12 +355,36 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         /// </summary>
         private static void ReplacePathsInClip(AnimationClip clip, string targetPath, string replaceName)
         {
+            if (clip == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(targetPath))
+            {
+                return;
+            }
+
+            if (replaceName == null)
+            {
+                return;
+            }
+
             // アニメーションクリップ内の全バインディングを取得
             EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(clip);
 
             foreach (var binding in bindings)
             {
+                if (string.IsNullOrEmpty(binding.path))
+                {
+                    continue;
+                }
+
                 if (!binding.path.StartsWith(targetPath)) continue;
+
+                // パス境界の検証: "Body" が "Body2" に誤マッチしないよう、
+                // targetPath の直後が '/' または完全一致であることを確認する
+                if (binding.path.Length > targetPath.Length && binding.path[targetPath.Length] != '/') continue;
 
                 string remainingPath = binding.path.Substring(targetPath.Length);
                 string newPath = replaceName + remainingPath;
@@ -284,6 +398,117 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 };
                 AnimationUtility.SetEditorCurve(clip, newBinding, curve); // 新しいバインディングに追加
             }
+        }
+
+        /// <summary>
+        /// 顔メッシュの自動検出に使用する、VRCリップシンク系BlendShape名の候補リストです。
+        /// </summary>
+        internal static readonly string[] blendShapeMappingsFace = new string[]
+        {
+            "vrc.v_aa",
+            "vrc_v_aa",
+            "vrc_v.aa",
+            "lip_aa",
+            "lip.aa",
+            "mouth_a",
+            "mouth.a",
+            "あ",
+        };
+
+        /// <summary>
+        /// 指定名に一致するTransformを再帰的に検索して一覧化します。
+        /// EditorOnly タグや非アクティブの GameObject は除外します。
+        /// </summary>
+        internal static List<Transform> FindDeepChildren(Transform parent, string name)
+        {
+            if (parent == null)
+            {
+                return new List<Transform>();
+            }
+            var foundChildren = new List<Transform>();
+            foreach (Transform child in parent)
+            {
+                if (child.gameObject.tag == "EditorOnly") continue;
+                if (child.gameObject.activeInHierarchy == false) continue;
+
+                if (child.name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    foundChildren.Add(child);
+                }
+                foundChildren.AddRange(FindDeepChildren(child, name));
+            }
+            return foundChildren;
+        }
+
+        /// <summary>
+        /// 指定名のBlendShapeがメッシュに存在するか判定します。
+        /// isCheckOrdinal が true なら完全一致、false なら大文字小文字を無視して比較します。
+        /// </summary>
+        internal static bool BlendShapeExists(Mesh mesh, string name, bool isCheckOrdinal)
+        {
+            if (mesh == null) return false;
+            for (int i = 0; i < mesh.blendShapeCount; i++)
+            {
+                if (isCheckOrdinal)
+                {
+                    if (mesh.GetBlendShapeName(i) == name)
+                        return true;
+                }
+                else
+                {
+                    if (string.Equals(mesh.GetBlendShapeName(i), name, System.StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// アバタールート配下から顔メッシュと素体メッシュを自動検出します。
+        /// Inspector を一度も開かずにビルドした場合のフォールバックとして使用します。
+        /// </summary>
+        internal static void AutoDetectFaceAndBodies(Transform avatarRoot, MMDSetup mmdSetup)
+        {
+            if (avatarRoot == null || mmdSetup == null)
+            {
+                return;
+            }
+
+            var candidates = FindDeepChildren(avatarRoot, "Face");
+            candidates.AddRange(FindDeepChildren(avatarRoot, "Body"));
+
+            if (candidates.Count == 0)
+            {
+                Debug.LogWarning("[MMDSetup] Auto-detect failed: No 'Face' or 'Body' transforms found.");
+                return;
+            }
+
+            // bodyMeshes を設定
+            mmdSetup.bodyMeshes = candidates;
+
+            // 顔メッシュを特定
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var smr = candidates[i].GetComponent<SkinnedMeshRenderer>();
+                if (smr == null) continue;
+
+                Mesh mesh = smr.sharedMesh;
+                if (mesh == null) continue;
+
+                // 名前が "Face" か、リップシンク用 BlendShape を持っていれば顔メッシュと判断
+                for (int j = 0; j < blendShapeMappingsFace.Length; j++)
+                {
+                    if (string.Equals(candidates[i].name, "Face", System.StringComparison.OrdinalIgnoreCase)
+                        || BlendShapeExists(mesh, blendShapeMappingsFace[j], false))
+                    {
+                        mmdSetup.faceMesh = candidates[i];
+                        Debug.Log($"[MMDSetup] Auto-detected face mesh: {candidates[i].name}");
+                        return;
+                    }
+                }
+            }
+
+            Debug.LogWarning("[MMDSetup] Auto-detect: Could not identify face mesh from candidates.");
         }
 
         /// <summary>
@@ -324,7 +549,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
         /// <summary>
         /// BlendShape名からインデックスを解決します（完全一致）。
         /// </summary>
-        private static int FindBlendShapeIndexByName(Mesh mesh, string targetName)
+        internal static int FindBlendShapeIndexByName(Mesh mesh, string targetName)
         {
             if (mesh == null || string.IsNullOrEmpty(targetName))
             {

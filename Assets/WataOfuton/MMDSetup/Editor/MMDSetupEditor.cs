@@ -74,15 +74,15 @@ namespace WataOfuton.Tools.MMDSetup.Editor
 
                 Transform AvatarRoot = FindRootWithDescriptor(MMDSetup.transform);
 
-                List<Transform> bodies = FindDeepChildren(AvatarRoot, "Face");
-                bodies.AddRange(FindDeepChildren(AvatarRoot, "Body"));
+                List<Transform> bodies = MMDSetupPlugin.FindDeepChildren(AvatarRoot, "Face");
+                bodies.AddRange(MMDSetupPlugin.FindDeepChildren(AvatarRoot, "Body"));
 
                 bodyMeshes.arraySize = bodies.Count;
 
                 if (bodies.Count > 0)
                 {
                     bool isGetFace = false;
-                    var faceBSCheckList = blendShapeMappingsFace;
+                    var faceBSCheckList = MMDSetupPlugin.blendShapeMappingsFace;
                     for (int i = 0; i < bodies.Count; i++)
                     {
                         SerializedProperty bodyProperty = bodyMeshes.GetArrayElementAtIndex(i);
@@ -95,7 +95,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                             for (int j = 0; j < faceBSCheckList.Length; j++)
                             {
                                 if (string.Equals(bodies[i].name, "Face", System.StringComparison.OrdinalIgnoreCase)
-                                    || BlendShapeExists(mesh, faceBSCheckList[j], false))
+                                    || MMDSetupPlugin.BlendShapeExists(mesh, faceBSCheckList[j], false))
                                 {
                                     // 頭メッシュと判断
                                     faceMesh.objectReferenceValue = bodies[i];
@@ -132,29 +132,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             serializedObject.ApplyModifiedProperties();
         }
 
-        /// <summary>
-        /// 指定名に一致するTransformを再帰的に検索して一覧化します。
-        /// </summary>
-        private static List<Transform> FindDeepChildren(Transform parent, string name)
-        {
-            if (parent == null)
-            {
-                return new List<Transform>();
-            }
-            List<Transform> foundChildren = new List<Transform>();
-            foreach (Transform child in parent)
-            {
-                if (child.gameObject.tag == "EditorOnly") continue;
-                if (child.gameObject.activeInHierarchy == false) continue;
-
-                if (child.name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    foundChildren.Add(child);
-                }
-                foundChildren.AddRange(FindDeepChildren(child, name));
-            }
-            return foundChildren;
-        }
 
         /// <summary>
         /// 親方向へ辿り、VRCAvatarDescriptorを持つTransformをアバタールートとして返します。
@@ -171,39 +148,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             }
             return null;
         }
-
-        /// <summary>
-        /// 指定名のBlendShapeがメッシュに存在するか判定します。
-        /// </summary>
-        private static bool BlendShapeExists(Mesh mesh, string name, bool isCheckOrdinal)
-        {
-            for (int i = 0; i < mesh.blendShapeCount; i++)
-            {
-                if (isCheckOrdinal)
-                {
-                    if (mesh.GetBlendShapeName(i) == name)
-                        return true;
-                }
-                else
-                {
-                    if (string.Equals(mesh.GetBlendShapeName(i), name, System.StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        private static string[] blendShapeMappingsFace = new string[]
-        {
-            "vrc.v_aa",
-            "vrc_v_aa",
-            "vrc_v.aa",
-            "lip_aa",
-            "lip.aa",
-            "mouse_a",
-            "mouse.a",
-            "あ",
-        };
 
         /// <summary>
         /// MMD用BlendShapeマッピングのUI（Popup/Slider/Override/Blend）を描画します。
@@ -257,7 +201,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                     SerializedProperty isoverrideArrayProperty = enableOverrideBS.GetArrayElementAtIndex(i);
 
                     // 既に同名シェイプキーがある場合
-                    if (BlendShapeExists(mesh, mappinglist[i], true) && !isoverrideArrayProperty.boolValue)
+                    if (MMDSetupPlugin.BlendShapeExists(mesh, mappinglist[i], true) && !isoverrideArrayProperty.boolValue)
                     {
                         EditorGUILayout.BeginHorizontal();
                         EditorGUILayout.LabelField(mappinglist[i], GUILayout.Width(100));
@@ -354,26 +298,6 @@ namespace WataOfuton.Tools.MMDSetup.Editor
             enableOverrideBS.arraySize = length;
         }
 
-        /// <summary>
-        /// BlendShape名からインデックスを解決します（完全一致）。
-        /// </summary>
-        private static int FindBlendShapeIndexByName(Mesh mesh, string targetName)
-        {
-            if (mesh == null || string.IsNullOrEmpty(targetName))
-            {
-                return -1;
-            }
-
-            int blendShapeCount = mesh.blendShapeCount;
-            for (int i = 0; i < blendShapeCount; i++)
-            {
-                if (mesh.GetBlendShapeName(i) == targetName)
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
 
         /// <summary>
         /// 保存済みのBlendShape名から、現在メッシュ上のpopup index(1-based)へ追従させます。
@@ -396,7 +320,7 @@ namespace WataOfuton.Tools.MMDSetup.Editor
                 return;
             }
 
-            int realIndex = FindBlendShapeIndexByName(mesh, storedName);
+            int realIndex = MMDSetupPlugin.FindBlendShapeIndexByName(mesh, storedName);
             int popupIndex = realIndex >= 0 ? realIndex + 1 : 0;
             popupIndexProperty.intValue = popupIndex;
         }
